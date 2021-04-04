@@ -4105,8 +4105,8 @@ class EditorApplication {
     init = ()=>{
         if (isNull(this.canvasManager) || isNull(this.canvasManager.graphCanvas)) return;
         this.canvasManager.init();
-        const node = bufferToHash("node");
-        const n = node;
+        const entryPoint = bufferToHash("entryPoint");
+        const n = entryPoint;
         this.scopeGraphHistory.dependancyModuleInjection(this.canvasManager, this.store, this.activateNode);
         this.scopeGraphHistory.restart(n);
         this.update();
@@ -4194,8 +4194,8 @@ class ViewerApplication {
     init = ()=>{
         if (isNull(this.canvasManager) || isNull(this.canvasManager.graphCanvas)) return;
         this.canvasManager.init();
-        const node = bufferToHash("node");
-        const n = node;
+        const entryPoint = bufferToHash("entryPoint");
+        const n = entryPoint;
         this.scopeGraphHistory.dependancyModuleInjection(this.canvasManager, this.store, this.activateNode);
         this.scopeGraphHistory.restart(n);
         this.update();
