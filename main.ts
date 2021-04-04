@@ -235,7 +235,7 @@
   <div id="network-graph">
   </div>
   <script>
-    remoteStorageURL = ""
+    remoteStorageURL = "https://raw.githubusercontent.com/ArbaVojaganto/arba-vojaganto/main/"
   </script>
   <script>
 const HEX_CHARS = "0123456789abcdef".split("");
