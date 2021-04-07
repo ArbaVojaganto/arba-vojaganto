@@ -791,15 +791,15 @@ const todayString = ()=>{
 class Node1 {
     referers = {
     };
-    constructor(hash4, title, createdAt, thumbnail, description, vector, remoteUri){
-        this.hash = hash4;
+    constructor(hash2, title, createdAt, thumbnail, description, vector, remoteUri){
+        this.hash = hash2;
         this.title = title;
         this.createdAt = createdAt;
         this.thumbnail = thumbnail;
         this.description = description;
         this.vector = vector;
         this.remoteUri = remoteUri;
-        console.log("create node instance:" + hash4);
+        console.log("create node instance:" + hash2);
         const allhash = bufferToHash("node");
         vector[allhash] = vector[allhash] ?? {
             tag: 1
@@ -826,56 +826,427 @@ class Node1 {
         return true;
     };
 }
-class BlobMeta extends Node1 {
-    type = "BlobMeta";
-    constructor(hash1, title1, extention, createdAt1, thumbnail1, description1, vector1, mimeType, remoteUri1){
-        super(hash1, title1, createdAt1, thumbnail1, description1, vector1, remoteUri1);
-        this.extention = extention;
-        this.mimeType = mimeType;
-        const allhash1 = bufferToHash("blob");
-        vector1[allhash1] = vector1[allhash1] ?? {
-            tag: 1
+class EventDispatcher {
+    ListnersMap = {
+    };
+    getListeners = (eventType)=>{
+        if (!this.ListnersMap[eventType]) {
+            this.ListnersMap[eventType] = [];
+        }
+        return this.ListnersMap[eventType];
+    };
+    addEventListner(eventType, callback, options = {
+    }) {
+        const listner = {
+            oneShot: !!options.oneShot,
+            callback: callback
+        };
+        this.getListeners(eventType).push(listner);
+    }
+    removeEventListner(eventType, callback) {
+        const listnerList = this.getListeners(eventType);
+        const index = listnerList.findIndex((listner)=>{
+            listner === callback;
+        });
+        if (index >= 0) {
+            listnerList.splice(index, 1);
+        }
+    }
+    removeAllEventListner() {
+        this.ListnersMap = {
         };
     }
-    static validation = (meta)=>{
-        if (meta.type != "BlobMeta") return false;
-        if (isNull(meta.extention)) return false;
-        if (isNull(meta.mimeType)) return false;
-        if (!Node1.validation(meta)) return false;
-        return true;
-    };
+    dispatchEvent(event) {
+        const listnerList = this.getListeners(event.type);
+        listnerList.forEach((e)=>{
+            e.callback(event);
+        });
+        const filtered = listnerList.filter((listner)=>!listner.oneShot
+        );
+        this.ListnersMap[event.type] = filtered;
+    }
 }
-class TagMeta extends Node1 {
-    type = 'TagMeta';
-    constructor(hash2, title2, createdAt2, thumbnail2, description2, vector2, remoteUri2){
-        super(hash2, title2, createdAt2, thumbnail2, description2, vector2, remoteUri2);
-        const blob = new TextEncoder().encode(title2);
-        this.hash = bufferToHash(blob);
-        const allhash2 = bufferToHash("tag");
-        vector2[allhash2] = vector2[allhash2] ?? {
-            tag: 1
+const isMatrix = (o)=>{
+    if (Array.isArray(o)) {
+        return true;
+    } else {
+        return false;
+    }
+};
+const multiplyVector = (m0, m1)=>{
+    return {
+        x: m0[0] * m1.x + m0[1] * m1.y + m0[2],
+        y: m0[3] * m1.x + m0[4] * m1.y + m0[5]
+    };
+};
+const multiplyMatrix = (m0, m1)=>{
+    return [
+        m0[0] * m1[0] + m0[1] * m1[3] + m0[2] * m1[6],
+        m0[0] * m1[1] + m0[1] * m1[4] + m0[2] * m1[7],
+        m0[0] * m1[2] + m0[1] * m1[5] + m0[2] * m1[8],
+        m0[3] * m1[0] + m0[4] * m1[3] + m0[5] * m1[6],
+        m0[3] * m1[1] + m0[4] * m1[4] + m0[5] * m1[7],
+        m0[3] * m1[2] + m0[4] * m1[5] + m0[5] * m1[8],
+        m0[6] * m1[0] + m0[7] * m1[3] + m0[8] * m1[6],
+        m0[6] * m1[1] + m0[7] * m1[4] + m0[8] * m1[7],
+        m0[6] * m1[2] + m0[7] * m1[5] + m0[8] * m1[8], 
+    ];
+};
+const translateMatrix = (x, y)=>{
+    return [
+        1,
+        0,
+        x,
+        0,
+        1,
+        y,
+        0,
+        0,
+        1
+    ];
+};
+const scaleMatrix = (x, y)=>{
+    return [
+        x,
+        0,
+        0,
+        0,
+        y,
+        0,
+        0,
+        0,
+        1
+    ];
+};
+class CanvasManager extends EventDispatcher {
+    _translating = false;
+    _prePos = {
+        x: 0,
+        y: 0
+    };
+    _redrawFlag = true;
+    _m = [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ];
+    _inv = [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ];
+    _vv = {
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0
+    };
+    _vp = {
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0
+    };
+    _resizeTimeoutId = -1;
+    _resizeType = 'no scaleMatrix top left';
+    width = ()=>{
+        return this.graphCanvas ? this.graphCanvas.width : -1;
+    };
+    height = ()=>{
+        return this.graphCanvas ? this.graphCanvas.height : -1;
+    };
+    id = ()=>{
+        return this.graphCanvas ? this.graphCanvas.id : "";
+    };
+    constructor(document1, rootNode){
+        super();
+        this.document = document1;
+        this.rootNode = rootNode;
+        this.graphCanvas = document1.createElement("canvas");
+        this.graphCanvas.style.width = window.innerWidth + 'px';
+        this.graphCanvas.style.height = window.innerHeight + 'px';
+        this.graphCanvas.width = Math.floor(window.innerWidth * window.devicePixelRatio);
+        this.graphCanvas.height = Math.floor(window.innerHeight * window.devicePixelRatio);
+        this.graphCanvas.id = "network-graph-canvas";
+        rootNode.appendChild(this.graphCanvas);
+    }
+    init = ()=>{
+        this.initModel();
+        this.updateDom();
+        this.initController();
+    };
+    initModel = ()=>{
+        this._translating = false;
+        this._redrawFlag = true;
+        this._resizeTimeoutId = -1;
+        this._resizeType = 'no scaleMatrix top left';
+        this.updateViewPort();
+        this._vv = {
+            x: 0,
+            y: 0,
+            w: this._vp.w,
+            h: this._vp.h
         };
-    }
-    static validation = (meta)=>{
-        if (meta.type != "TagMeta") return false;
-        if (!Node1.validation(meta)) return false;
-        return true;
+        this.updatePrjMatrix();
     };
-}
-class SymbolNode extends Node1 {
-    type = 'SymbolNode';
-    constructor(hash3, title3, createdAt3, thumbnail3, description3, vector3, remoteUri3){
-        super(hash3, title3, createdAt3, thumbnail3, description3, vector3, remoteUri3);
-        const unixtime = new Date().getTime().toString();
-        const randomText = Math.random().toString(32).substring(2);
-        const blob1 = new TextEncoder().encode(unixtime + randomText);
-        this.hash = bufferToHash(blob1);
-        this.createdAt = new Date().toISOString();
-    }
-    static validation = (meta)=>{
-        if (meta.type != "SymbolNode") return false;
-        if (!Node1.validation(meta)) return false;
-        return true;
+    initController = ()=>{
+        if (!this.graphCanvas) {
+            return;
+        }
+        this.graphCanvas.addEventListener('dblclick', (e)=>{
+            e.preventDefault();
+            const event = {
+                type: 'dblclick',
+                which: e.which
+            };
+            super.dispatchEvent(event);
+        });
+        this.graphCanvas.addEventListener('mousedown', (e)=>{
+            e.preventDefault();
+            if (this._resizeTimeoutId !== -1) {
+                return;
+            }
+            if (this._translating) {
+                return;
+            }
+            if (e.shiftKey) {
+                this._translating = true;
+            }
+            const cursorPos = {
+                x: e.pageX,
+                y: e.pageY
+            };
+            this._prePos = this.screenToWorld(cursorPos);
+            const event = {
+                type: 'mousedown',
+                which: e.which
+            };
+            super.dispatchEvent(event);
+        });
+        this.graphCanvas.addEventListener('mousemove', (e)=>{
+            const cursorPos = {
+                x: e.pageX,
+                y: e.pageY
+            };
+            const curPos = this.screenToWorld(cursorPos);
+            if (this._translating) {
+                this.translate({
+                    x: this._prePos.x - curPos.x,
+                    y: this._prePos.y - curPos.y
+                });
+                this._prePos = this.screenToWorld(cursorPos);
+                this._redrawFlag = true;
+            } else {
+                const event = {
+                    type: 'mousemove',
+                    which: e.which,
+                    x: curPos.x,
+                    y: curPos.y
+                };
+                super.dispatchEvent(event);
+            }
+        });
+        this.graphCanvas.addEventListener('mouseup', (e)=>{
+            this._translating = false;
+            const event = {
+                type: 'mouseup',
+                which: e.which
+            };
+            super.dispatchEvent(event);
+        });
+        this.graphCanvas.addEventListener('mousewheel', (e)=>{
+            if (this._resizeTimeoutId !== -1) {
+                return;
+            }
+            const cursorPos = {
+                x: e.pageX,
+                y: e.pageY
+            };
+            const curPos = this.screenToWorld(cursorPos);
+            const rate = e.wheelDelta > 0 ? 1 / 1.2 : 1.2;
+            this.scale(curPos, rate);
+            this._redrawFlag = true;
+        });
+        this.graphCanvas.addEventListener('resize', (e)=>{
+            if (this._resizeTimeoutId !== -1) {
+                clearTimeout(this._resizeTimeoutId);
+                this._resizeTimeoutId = -1;
+            }
+            this._resizeTimeoutId = setTimeout(()=>{
+                if (this._resizeType === 'scaleMatrix center') {
+                    this.resizeScaleCenter();
+                } else if (this._resizeType === 'scaleMatrix top left') {
+                    this.resizeScaleTopLeft();
+                } else if (this._resizeType === 'no scaleMatrix center') {
+                    this.resizeNoScaleCenter();
+                } else if (this._resizeType === 'no scaleMatrix top left') {
+                    this.resizeNoScaleTopLeft();
+                }
+                this.updateDom();
+                this._redrawFlag = true;
+                this._resizeTimeoutId = -1;
+            }, 500);
+        });
+    };
+    updateViewPort = ()=>{
+        this._vp = {
+            x: 0,
+            y: 0,
+            w: window.innerWidth * window.devicePixelRatio,
+            h: window.innerHeight * window.devicePixelRatio
+        };
+    };
+    updatePrjMatrix = ()=>{
+        const trans = translateMatrix(-this._vv.x, -this._vv.y);
+        const invTrans = translateMatrix(this._vv.x, this._vv.y);
+        const scale = scaleMatrix(this._vp.w / this._vv.w, this._vp.h / this._vv.h);
+        const invScale = scaleMatrix(this._vv.w / this._vp.w, this._vv.h / this._vp.h);
+        this._m = multiplyMatrix(scale, trans);
+        this._inv = multiplyMatrix(invTrans, invScale);
+    };
+    resizeScaleCenter = ()=>{
+        const rate = {
+            x: this._vv.w / this._vp.w,
+            y: this._vv.h / this._vp.h
+        };
+        const vvsq = {
+            x: 0,
+            y: 0,
+            size: 0
+        };
+        if (this._vv.w > this._vv.h) {
+            vvsq.y = this._vv.y;
+            vvsq.size = this._vv.h;
+            vvsq.x = this._vv.x + (this._vv.w - vvsq.size) / 2;
+        } else {
+            vvsq.x = this._vv.x;
+            vvsq.size = this._vv.w;
+            vvsq.y = this._vv.y + (this._vv.h - vvsq.size) / 2;
+        }
+        this.updateViewPort();
+        const aspect = this._vp.w / this._vp.h;
+        if (aspect > 1) {
+            this._vv.y = vvsq.y;
+            this._vv.h = vvsq.size;
+            this._vv.x = vvsq.x - vvsq.size * aspect / 2 + vvsq.size / 2;
+            this._vv.w = vvsq.size * aspect;
+        } else {
+            this._vv.x = vvsq.x;
+            this._vv.w = vvsq.size;
+            this._vv.y = vvsq.y - vvsq.size / aspect / 2 + vvsq.size / 2;
+            this._vv.h = vvsq.size / aspect;
+        }
+        this.updatePrjMatrix();
+    };
+    resizeScaleTopLeft = ()=>{
+        const rate = {
+            x: this._vv.w / this._vp.w,
+            y: this._vv.h / this._vp.h
+        };
+        const vvsq = {
+            x: 0,
+            y: 0,
+            size: 0
+        };
+        if (this._vv.w > this._vv.h) {
+            vvsq.size = this._vv.h;
+        } else {
+            vvsq.size = this._vv.w;
+        }
+        this.updateViewPort();
+        const aspect = this._vp.w / this._vp.h;
+        if (aspect > 1) {
+            this._vv.h = vvsq.size;
+            this._vv.w = vvsq.size * aspect;
+        } else {
+            this._vv.w = vvsq.size;
+            this._vv.h = vvsq.size / aspect;
+        }
+        this.updatePrjMatrix();
+    };
+    resizeNoScaleCenter = ()=>{
+        const rate = {
+            x: this._vv.w / this._vp.w,
+            y: this._vv.h / this._vp.h
+        };
+        const oldCenter = {
+            x: this._vv.x + this._vv.w / 2,
+            y: this._vv.y + this._vv.h / 2
+        };
+        this.updateViewPort();
+        this._vv.w = this._vp.w * rate.x;
+        this._vv.h = this._vp.h * rate.y;
+        this._vv.x = oldCenter.x - this._vv.w / 2;
+        this._vv.y = oldCenter.y - this._vv.h / 2;
+        this.updatePrjMatrix();
+    };
+    resizeNoScaleTopLeft = ()=>{
+        const rate = {
+            x: this._vv.w / this._vp.w,
+            y: this._vv.h / this._vp.h
+        };
+        this.updateViewPort();
+        this._vv.w = this._vp.w * rate.x;
+        this._vv.h = this._vp.h * rate.y;
+        this.updatePrjMatrix();
+    };
+    translate = (vec)=>{
+        this._vv.x += vec.x;
+        this._vv.y += vec.y;
+        this.updatePrjMatrix();
+    };
+    scale = (center, rate)=>{
+        let topLeft = {
+            x: this._vv.x,
+            y: this._vv.y
+        };
+        let mat;
+        mat = translateMatrix(-center.x, -center.y);
+        mat = multiplyMatrix(scaleMatrix(rate, rate), mat);
+        mat = multiplyMatrix(translateMatrix(center.x, center.y), mat);
+        topLeft = multiplyVector(mat, topLeft);
+        this._vv.x = topLeft.x;
+        this._vv.y = topLeft.y;
+        this._vv.w *= rate;
+        this._vv.h *= rate;
+        this.updatePrjMatrix();
+    };
+    screenToWorld = (screenPos)=>{
+        return multiplyVector(this._inv, screenPos);
+    };
+    updateDom = ()=>{
+        if (!this.graphCanvas) {
+            return;
+        }
+        this.graphCanvas.width = this._vp.w;
+        this.graphCanvas.height = this._vp.h;
+    };
+    updateView = ()=>{
+        if (!this.graphCanvas) return;
+        const ctx = this.graphCanvas.getContext('2d');
+        if (!ctx) return;
+        ctx.save();
+        ctx.clearRect(this._vv.x, this._vv.y, this._vv.w, this._vv.h);
+        ctx.setTransform(this._m[0], this._m[3], this._m[1], this._m[4], this._m[2], this._m[5]);
+    };
+    update = ()=>{
+        this.updateView();
+        this._redrawFlag = false;
+    };
+    getGraphCanvas = ()=>{
+        return this.graphCanvas;
     };
 }
 const GetRequest = async (uri, query = "")=>{
@@ -941,51 +1312,493 @@ const PatchRequest = async (uri)=>{
         console.log(e);
     });
 };
-const CreateTextArea = (document, value = '{"title": "", "content": ""}', rows = 10, cols = 10)=>{
-    let area = document.createElement("textarea");
+const CreateTextArea = (document1, value = '{"title": "", "content": ""}', rows = 10, cols = 10)=>{
+    let area = document1.createElement("textarea");
     area.readOnly = false;
     area.value = value;
     area.rows = rows;
     area.cols = cols;
     return area;
 };
-const CreateInputText = (document, value = "")=>{
-    let input = document.createElement("input");
+const CreateInputText = (document1, value = "")=>{
+    let input = document1.createElement("input");
     input.type = "text";
     input.value = "tag";
     return input;
 };
-const CreateInputButton = (document, value = "", callback = (e)=>{
+const CreateInputButton = (document1, value = "", callback = (e)=>{
 })=>{
-    let button = document.createElement("button");
+    let button = document1.createElement("button");
     button.innerText = value;
     button.value = value;
     button.onclick = callback;
     return button;
 };
-const CreateImg = (document, src, width = 0, height = 0, alt = "")=>{
-    let img = document.createElement("img");
+const CreateImg = (document1, src, width = 0, height = 0, alt = "")=>{
+    let img = document1.createElement("img");
     img.src = src;
     if (width != 0) img.width = width;
     if (height != 0) img.height = height;
     img.alt = alt;
     return img;
 };
-const CreateAutocompleteInput = (document, dataListId, dataList = [], value = "")=>{
-    const input = document.createElement("input");
+const CreateAutocompleteInput = (document1, dataListId, dataList = [], value = "")=>{
+    const input = document1.createElement("input");
     input.type = "text";
     input.value = value;
     input.setAttribute('list', dataListId);
     input.autocomplete = "true";
-    let dl = document.createElement('datalist');
+    let dl = document1.createElement('datalist');
     dl.id = dataListId;
     dataList.forEach((e)=>{
-        let option = document.createElement('option');
+        let option = document1.createElement('option');
         option.value = e;
         dl.appendChild(option);
     });
     input.appendChild(dl);
     return input;
+};
+class StoredNodes {
+    dict = {
+    };
+    onRegister = ()=>{
+    };
+    constructor(){
+    }
+    tagHashDict = ()=>{
+        return Object.fromEntries(Object.entries(this.dict).filter(([key1, value])=>value.type == "TagMeta"
+        ).map(([key1, value])=>[
+                value.title,
+                value
+            ]
+        ));
+    };
+    blobHashDict = ()=>{
+        return Object.fromEntries(Object.entries(this.dict).filter(([key1, value])=>value.type == "BlobMeta"
+        ));
+    };
+    fetch = async (hash1)=>{
+        if (!this.dict[hash1]) {
+            const updateNodes = await this.remoteGet(hash1);
+            updateNodes.forEach((e)=>this.cache(e)
+            );
+        }
+        return this.dict[hash1];
+    };
+    update = async (node, optionFormData)=>{
+        if (JSON.stringify(node) != JSON.stringify(this.dict[node.hash])) {
+            const updateNodes = await this.remotePut(node, optionFormData);
+            updateNodes.forEach((e)=>this.cache(e)
+            );
+            return updateNodes;
+        } else {
+            return [];
+        }
+    };
+    remotePut = async (node, optionFormData)=>{
+        optionFormData.set("meta", JSON.stringify(node));
+        console.log({
+            ...optionFormData
+        });
+        const response = await PutRequest("/posts/" + node.hash, optionFormData);
+        if (isNull(response)) return [];
+        const json = await response.json();
+        console.log(json);
+        const nodes = Object.values(json).filter((node1)=>{
+            const result = Node1.validation(node1);
+            if (!result) throw new Error('バリデーション不能なjsonが混入しています');
+            return result;
+        });
+        return nodes;
+    };
+    cache = (e)=>{
+        this.dict[e.hash] = e;
+        this.onRegister();
+    };
+    setRemoteGetMethod = (method)=>{
+        this.remoteGet = method;
+    };
+    remoteGet = async (hash1, force = false)=>{
+        const pathStruct = metaResourcePath(hash1);
+        const path = pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
+        const response = await GetRequest(path);
+        if (isNull(response)) return [];
+        const json = await response.json();
+        console.log(json);
+        if (Node1.validation(json)) {
+            console.log(\`remoteGet: \${json}\`);
+            const nodeArray = [
+                json
+            ];
+            return nodeArray;
+        } else {
+            console.warn("Nodeとして解釈できないものを取得しました");
+            return [];
+        }
+    };
+}
+class BlobMeta extends Node1 {
+    type = "BlobMeta";
+    constructor(hash1, title1, extention, createdAt1, thumbnail1, description1, vector1, mimeType, remoteUri1){
+        super(hash1, title1, createdAt1, thumbnail1, description1, vector1, remoteUri1);
+        this.extention = extention;
+        this.mimeType = mimeType;
+        const allhash1 = bufferToHash("blob");
+        vector1[allhash1] = vector1[allhash1] ?? {
+            tag: 1
+        };
+    }
+    static validation = (meta)=>{
+        if (meta.type != "BlobMeta") return false;
+        if (isNull(meta.extention)) return false;
+        if (isNull(meta.mimeType)) return false;
+        if (!Node1.validation(meta)) return false;
+        return true;
+    };
+}
+class ReadOnlyNodeDetail extends HTMLDivElement {
+    constructor(fetchNode2){
+        super();
+        this.fetchNode = fetchNode2;
+        this.classList.add("node-detail");
+        this.thumbnailElement = document.createElement('img');
+        this.thumbnailElement.classList.add("thumbnail");
+        this.thumbnailElement.hidden = true;
+        this.appendChild(this.thumbnailElement);
+        this.titleElement = document.createElement('p');
+        this.titleElement.innerText = "title";
+        this.appendChild(this.titleElement);
+        this.descriptionElement = document.createElement('p');
+        this.descriptionElement.innerText = "description";
+        this.appendChild(this.descriptionElement);
+        const modal = document.getElementById('modal');
+        const mask = document.getElementById('mask');
+        this.modalOpenElement = document.createElement("div");
+        if (modal != null && mask != null && !isNull(this.modalOpenElement)) {
+            this.modalOpenElement.id = "open";
+            this.modalOpenElement.innerText = "click to open content";
+            this.modalOpenElement.onclick = ()=>{
+                modal.classList.remove('hidden');
+                mask.classList.remove('hidden');
+            };
+            mask.onclick = ()=>{
+                modal.classList.add('hidden');
+                mask.classList.add('hidden');
+            };
+            this.appendChild(this.modalOpenElement);
+            this.modalWindowElement = modal;
+        }
+    }
+    reloadDetail = async ()=>{
+        if (this.currentNode) {
+            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
+            if (!isNull(remoteLatestNode)) {
+                this.setDetail(remoteLatestNode);
+            }
+        }
+    };
+    setDetail(node) {
+        if (isNull(this.titleElement) || isNull(this.thumbnailElement) || isNull(this.descriptionElement)) return;
+        this.titleElement.innerText = node.title.substring(0, 25);
+        this.descriptionElement.innerText = node.description;
+        const orgPathData = orgmodeResourcePath(node.hash);
+        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
+            const blobPathData = blobResourcePath(node.hash);
+            this.thumbnailElement.src = blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+            this.thumbnailElement.hidden = false;
+        } else {
+            if (node.thumbnail == "") {
+                this.thumbnailElement.hidden = true;
+            } else {
+                this.thumbnailElement.src = node.thumbnail;
+                this.thumbnailElement.hidden = false;
+            }
+        }
+        if (this.modalWindowElement) {
+            while(this.modalWindowElement.firstChild){
+                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
+            }
+            const iframe = document.createElement("iframe");
+            iframe.src = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            this.modalWindowElement.appendChild(iframe);
+        }
+        const props = objToRecurisveAccordionMenu(document, node);
+        if (isNull(this.properties)) {
+            this.appendChild(document.createTextNode("props"));
+            this.properties = props;
+            this.appendChild(this.properties);
+        } else {
+            this.replaceChild(props, this.properties);
+            this.properties = props;
+        }
+        const tagsRoot = document.createElement('ul');
+        if (isNull(this.tags)) {
+            this.tags = tagsRoot;
+            this.appendChild(this.tags);
+        } else {
+            this.replaceChild(tagsRoot, this.tags);
+            this.tags = tagsRoot;
+        }
+        Object.entries(node.vector).forEach(async ([target, label])=>{
+            const node = await this.fetchNode(target);
+            if (node) {
+                const li = document.createElement('li');
+                li.innerText = node.title;
+                tagsRoot.appendChild(li);
+            }
+        });
+        this.currentNode = node;
+    }
+}
+class EditableNodeDetail extends HTMLDivElement {
+    constructor(titleElement, descriptionElement, remoteLinkElement, jsonTextAreaElement, thumbnailElement, tagSelectorElement, tagInserterButtonElement, tagListElement, tagHashDict, fetchNode1, updateNode, reload1){
+        super();
+        this.titleElement = titleElement;
+        this.descriptionElement = descriptionElement;
+        this.remoteLinkElement = remoteLinkElement;
+        this.jsonTextAreaElement = jsonTextAreaElement;
+        this.thumbnailElement = thumbnailElement;
+        this.tagSelectorElement = tagSelectorElement;
+        this.tagInserterButtonElement = tagInserterButtonElement;
+        this.tagListElement = tagListElement;
+        this.tagHashDict = tagHashDict;
+        this.fetchNode = fetchNode1;
+        this.updateNode = updateNode;
+        this.reload = reload1;
+        this.classList.add("node-detail");
+        this.thumbnailElement.classList.add("thumbnail");
+        this.thumbnailElement.hidden = true;
+        this.appendChild(this.thumbnailElement);
+        this.titleElement.innerText = "title";
+        this.appendChild(this.titleElement);
+        this.descriptionElement.innerText = "description";
+        this.appendChild(this.descriptionElement);
+        this.remoteLinkElement.href = "remoteLink";
+        this.appendChild(this.remoteLinkElement);
+        const modal1 = document.getElementById('modal');
+        const mask1 = document.getElementById('mask');
+        this.modalOpenElement = document.createElement("div");
+        if (modal1 != null && mask1 != null && !isNull(this.modalOpenElement)) {
+            this.modalOpenElement.id = "open";
+            this.modalOpenElement.innerText = "click";
+            this.modalOpenElement.onclick = ()=>{
+                modal1.classList.remove('hidden');
+                mask1.classList.remove('hidden');
+            };
+            mask1.onclick = ()=>{
+                modal1.classList.add('hidden');
+                mask1.classList.add('hidden');
+            };
+            this.appendChild(this.modalOpenElement);
+            this.modalWindowElement = modal1;
+        }
+        this.remoteOpenOrgElement = document.createElement("div");
+        this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
+        this.appendChild(this.remoteOpenOrgElement);
+        this.remoteOpenBlobElement = document.createElement("div");
+        this.remoteOpenBlobElement.innerText = "xdgOpenBlob";
+        this.appendChild(this.remoteOpenBlobElement);
+        this.remoteOpenMetaElement = document.createElement("div");
+        this.remoteOpenMetaElement.innerText = "xdgOpenMeta";
+        this.appendChild(this.remoteOpenMetaElement);
+        this.appendChild(this.tagListElement);
+        this.appendChild(this.tagSelectorElement);
+        this.tagInserterButtonElement.onclick = this.insertTag;
+        this.appendChild(this.tagInserterButtonElement);
+        this.jsonTextAreaElement.value = "json";
+        this.appendChild(this.jsonTextAreaElement);
+    }
+    insertTag = async ()=>{
+        const node = JSON.parse(this.jsonTextAreaElement.value);
+        const tag = this.tagHashDict()[this.tagSelectorElement.value];
+        if (Node1.validation(node)) {
+            const index = tag.hash;
+            node.vector[index] = node.vector[index] ?? {
+            };
+            node.vector[index]["tag"] = 1;
+            this.jsonTextAreaElement.value = JSON.stringify(node);
+            await this.updateNode(node, new FormData);
+            this.reload();
+        }
+    };
+    reloadDetail = async ()=>{
+        if (this.currentNode) {
+            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
+            if (!isNull(remoteLatestNode)) {
+                this.setDetail(remoteLatestNode);
+            }
+        }
+    };
+    setDetail(node) {
+        this.titleElement.innerText = node.title.substring(0, 10);
+        this.descriptionElement.innerText = node.description;
+        const orgPathData = orgmodeResourcePath(node.hash);
+        this.jsonTextAreaElement.value = JSON.stringify(node);
+        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
+            const blobPathData = blobResourcePath(node.hash);
+            this.thumbnailElement.src = blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+            this.thumbnailElement.hidden = false;
+        } else {
+            if (node.thumbnail == "") {
+                this.thumbnailElement.hidden = true;
+            } else {
+                this.thumbnailElement.src = node.thumbnail;
+                this.thumbnailElement.hidden = false;
+            }
+        }
+        if (this.modalWindowElement) {
+            while(this.modalWindowElement.firstChild){
+                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
+            }
+            const iframe = document.createElement("iframe");
+            iframe.src = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            this.modalWindowElement.appendChild(iframe);
+        }
+        const PathElement = (name, copyString, onClickRequestPath)=>{
+            const elems = [];
+            const copy = document.createElement("button");
+            copy.onclick = ()=>{
+                textToClipBoard(document, copyString);
+            };
+            copy.innerText = \`\${name}: pathToClipboard\`;
+            elems.push(copy);
+            const request = document.createElement("button");
+            request.onclick = ()=>{
+                GetRequest(onClickRequestPath);
+            };
+            request.innerText = \`\${name}: remoteXdgOpen\`;
+            elems.push(request);
+            return elems;
+        };
+        if (this.remoteOpenOrgElement) {
+            removeAllChild(this.remoteOpenOrgElement);
+            const xdgOpenOrgPath = "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            const elems = PathElement("org", "/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention, xdgOpenOrgPath);
+            elems.forEach((e)=>{
+                if (this.remoteOpenOrgElement) {
+                    this.remoteOpenOrgElement.appendChild(e);
+                }
+            });
+        }
+        if (this.remoteOpenBlobElement) {
+            if (BlobMeta.validation(node)) {
+                removeAllChild(this.remoteOpenBlobElement);
+                const blobPathData = blobResourcePath(node.hash);
+                const xdgOpenBlobPath = "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+                const elems = PathElement("blob", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
+                elems.forEach((e)=>{
+                    if (this.remoteOpenBlobElement) {
+                        this.remoteOpenBlobElement.appendChild(e);
+                    }
+                });
+                this.remoteOpenBlobElement.hidden = false;
+            } else {
+                this.remoteOpenBlobElement.hidden = true;
+            }
+        }
+        if (this.remoteOpenMetaElement) {
+            removeAllChild(this.remoteOpenMetaElement);
+            const metaPathData = metaResourcePath(node.hash);
+            const xdgOpenMetaPath = "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
+            const elems = PathElement("json", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
+            elems.forEach((e)=>{
+                if (this.remoteOpenMetaElement) {
+                    this.remoteOpenMetaElement.appendChild(e);
+                }
+            });
+        }
+        while(this.tagListElement.firstChild){
+            this.tagListElement.removeChild(this.tagListElement.firstChild);
+        }
+        const ul = this.tagListElement;
+        Object.entries(node.vector).forEach(async ([target, label])=>{
+            const node = await this.fetchNode(target);
+            if (node) {
+                const li = document.createElement('li');
+                li.innerText = node.title;
+                ul.appendChild(li);
+            }
+        });
+        ul.appendChild(objToRecurisveAccordionMenu(document, node));
+        this.reloadTagSelectorDataList();
+        this.currentNode = node;
+    }
+    reloadTagSelectorDataList = ()=>{
+        const tagDict = this.tagHashDict();
+        const datalist = Object.values(tagDict).map((e)=>e.title
+        );
+        const tagSelector = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
+        const dl = document.getElementById("li-tag-datalist");
+        if (!isNull(dl)) {
+            while(dl.firstChild){
+                dl.removeChild(dl.firstChild);
+            }
+            datalist.forEach((e)=>{
+                let option = document.createElement('option');
+                option.value = e;
+                dl.appendChild(option);
+            });
+        }
+    };
+}
+const objToRecurisveAccordionMenu = (document2, obj)=>{
+    const root = document2.createElement('ul');
+    root.classList.add('accordion-child');
+    Object.entries(obj).forEach(([key1, value])=>{
+        const li = document2.createElement('li');
+        const label = document2.createElement('label');
+        label.innerText = \`\${key1.substring(0, 10)}: \`;
+        li.appendChild(label);
+        if (typeof value == 'object') {
+            const accordion = document2.createElement('input');
+            accordion.type = 'checkbox';
+            accordion.classList.add('toggle');
+            li.appendChild(accordion);
+            const ul = objToRecurisveAccordionMenu(document2, value);
+            li.appendChild(ul);
+        } else if (typeof value == 'string' || typeof value == 'number') {
+            const child = document2.createElement('input');
+            child.value = value.toString();
+            li.appendChild(child);
+        }
+        root.appendChild(li);
+    });
+    return root;
+};
+const objToRecursiveUList = (document2, obj)=>{
+    const ul = document2.createElement('ul');
+    Object.entries(obj).forEach(([key1, value])=>{
+        const li = document2.createElement('li');
+        li.innerText = key1.substring(0, 10) + ": ";
+        if (typeof value == 'object') {
+            const objElement = objToRecursiveUList(document2, value);
+            li.appendChild(objElement);
+        } else if (typeof value == 'string' || typeof value == 'number') {
+            const child = document2.createElement('input');
+            child.value = value.toString();
+            li.appendChild(child);
+        }
+        ul.appendChild(li);
+    });
+    return ul;
+};
+const nodeToRecursiveUList = (document2, node)=>{
+    return objToRecursiveUList(document2, node);
+};
+const removeAllChild = (target)=>{
+    while(target.firstChild){
+        target.removeChild(target.firstChild);
+    }
+};
+const textToClipBoard = (document2, text)=>{
+    const tempElement = document2.createElement("textarea");
+    tempElement.textContent = text;
+    document2.body.appendChild(tempElement);
+    document2.getSelection()?.selectAllChildren(tempElement);
+    tempElement.select();
+    var success = document2.execCommand('copy');
+    document2.body.removeChild(tempElement);
+    return success;
 };
 class PriorityQueue {
     items = {
@@ -2004,8 +2817,8 @@ class Edge {
 Graph._edge = function(contextid1, startNodeid1, endNodeid1, color1 = "#000", text1 = "", directional1 = false) {
     return new Edge(contextid1, startNodeid1, endNodeid1, color1, text1, directional1);
 };
-Graph._node = (contextid1, x, y, r, text1 = "", hash5 = "")=>{
-    return new Node2(contextid1, x, y, r, text1, hash5);
+Graph._node = (contextid1, x, y, r, text1 = "", hash3 = "")=>{
+    return new Node2(contextid1, x, y, r, text1, hash3);
 };
 class Node2 {
     type = "node";
@@ -2020,7 +2833,7 @@ class Node2 {
     time = new Date().getTime().toString();
     image = null;
     hash = "";
-    constructor(contextid1, x, y, r, text1 = "", hash5 = ""){
+    constructor(contextid1, x, y, r, text1 = "", hash3 = ""){
         this.contextid = contextid1;
         this.x = x;
         this.y = y;
@@ -2032,7 +2845,7 @@ class Node2 {
         this.text = text1;
         this.active = false;
         const context = Graph.getContext(this.contextid);
-        this.hash = hash5;
+        this.hash = hash3;
         context.objs[this.id] = this;
         this.build();
         if (this.text in Graph.functions) {
@@ -2205,41 +3018,6 @@ class Node2 {
 }
 Graph.functions = {
 };
-function bytesToUuid(bytes) {
-    const bits = [
-        ...bytes
-    ].map((bit)=>{
-        const s = bit.toString(16);
-        return bit < 16 ? "0" + s : s;
-    });
-    return [
-        ...bits.slice(0, 4),
-        "-",
-        ...bits.slice(4, 6),
-        "-",
-        ...bits.slice(6, 8),
-        "-",
-        ...bits.slice(8, 10),
-        "-",
-        ...bits.slice(10, 16), 
-    ].join("");
-}
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\$/i;
-function validate(id) {
-    return UUID_RE.test(id);
-}
-function generate() {
-    const rnds = crypto.getRandomValues(new Uint8Array(16));
-    rnds[6] = rnds[6] & 15 | 64;
-    rnds[8] = rnds[8] & 63 | 128;
-    return bytesToUuid(rnds);
-}
-const mod = function() {
-    return {
-        validate: validate,
-        generate: generate
-    };
-}();
 const HEX_CHARS1 = "0123456789abcdef".split("");
 const EXTRA1 = [
     -2147483648,
@@ -2623,444 +3401,6 @@ class DenoStdInternalError extends Error {
         this.name = "DenoStdInternalError";
     }
 }
-class EventDispatcher {
-    ListnersMap = {
-    };
-    getListeners = (eventType)=>{
-        if (!this.ListnersMap[eventType]) {
-            this.ListnersMap[eventType] = [];
-        }
-        return this.ListnersMap[eventType];
-    };
-    addEventListner(eventType, callback, options = {
-    }) {
-        const listner = {
-            oneShot: !!options.oneShot,
-            callback: callback
-        };
-        this.getListeners(eventType).push(listner);
-    }
-    removeEventListner(eventType, callback) {
-        const listnerList = this.getListeners(eventType);
-        const index = listnerList.findIndex((listner)=>{
-            listner === callback;
-        });
-        if (index >= 0) {
-            listnerList.splice(index, 1);
-        }
-    }
-    removeAllEventListner() {
-        this.ListnersMap = {
-        };
-    }
-    dispatchEvent(event) {
-        const listnerList = this.getListeners(event.type);
-        listnerList.forEach((e)=>{
-            e.callback(event);
-        });
-        const filtered = listnerList.filter((listner)=>!listner.oneShot
-        );
-        this.ListnersMap[event.type] = filtered;
-    }
-}
-const isMatrix = (o)=>{
-    if (Array.isArray(o)) {
-        return true;
-    } else {
-        return false;
-    }
-};
-const multiplyVector = (m0, m1)=>{
-    return {
-        x: m0[0] * m1.x + m0[1] * m1.y + m0[2],
-        y: m0[3] * m1.x + m0[4] * m1.y + m0[5]
-    };
-};
-const multiplyMatrix = (m0, m1)=>{
-    return [
-        m0[0] * m1[0] + m0[1] * m1[3] + m0[2] * m1[6],
-        m0[0] * m1[1] + m0[1] * m1[4] + m0[2] * m1[7],
-        m0[0] * m1[2] + m0[1] * m1[5] + m0[2] * m1[8],
-        m0[3] * m1[0] + m0[4] * m1[3] + m0[5] * m1[6],
-        m0[3] * m1[1] + m0[4] * m1[4] + m0[5] * m1[7],
-        m0[3] * m1[2] + m0[4] * m1[5] + m0[5] * m1[8],
-        m0[6] * m1[0] + m0[7] * m1[3] + m0[8] * m1[6],
-        m0[6] * m1[1] + m0[7] * m1[4] + m0[8] * m1[7],
-        m0[6] * m1[2] + m0[7] * m1[5] + m0[8] * m1[8], 
-    ];
-};
-const translateMatrix = (x1, y1)=>{
-    return [
-        1,
-        0,
-        x1,
-        0,
-        1,
-        y1,
-        0,
-        0,
-        1
-    ];
-};
-const scaleMatrix = (x1, y1)=>{
-    return [
-        x1,
-        0,
-        0,
-        0,
-        y1,
-        0,
-        0,
-        0,
-        1
-    ];
-};
-class CanvasManager extends EventDispatcher {
-    _translating = false;
-    _prePos = {
-        x: 0,
-        y: 0
-    };
-    _redrawFlag = true;
-    _m = [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-    ];
-    _inv = [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-    ];
-    _vv = {
-        x: 0,
-        y: 0,
-        w: 0,
-        h: 0
-    };
-    _vp = {
-        x: 0,
-        y: 0,
-        w: 0,
-        h: 0
-    };
-    _resizeTimeoutId = -1;
-    _resizeType = 'no scaleMatrix top left';
-    width = ()=>{
-        return this.graphCanvas ? this.graphCanvas.width : -1;
-    };
-    height = ()=>{
-        return this.graphCanvas ? this.graphCanvas.height : -1;
-    };
-    id = ()=>{
-        return this.graphCanvas ? this.graphCanvas.id : "";
-    };
-    constructor(document2, rootNode){
-        super();
-        this.document = document2;
-        this.rootNode = rootNode;
-        this.graphCanvas = document2.createElement("canvas");
-        this.graphCanvas.style.width = window.innerWidth + 'px';
-        this.graphCanvas.style.height = window.innerHeight + 'px';
-        this.graphCanvas.width = Math.floor(window.innerWidth * window.devicePixelRatio);
-        this.graphCanvas.height = Math.floor(window.innerHeight * window.devicePixelRatio);
-        this.graphCanvas.id = "network-graph-canvas";
-        rootNode.appendChild(this.graphCanvas);
-    }
-    init = ()=>{
-        this.initModel();
-        this.updateDom();
-        this.initController();
-    };
-    initModel = ()=>{
-        this._translating = false;
-        this._redrawFlag = true;
-        this._resizeTimeoutId = -1;
-        this._resizeType = 'no scaleMatrix top left';
-        this.updateViewPort();
-        this._vv = {
-            x: 0,
-            y: 0,
-            w: this._vp.w,
-            h: this._vp.h
-        };
-        this.updatePrjMatrix();
-    };
-    initController = ()=>{
-        if (!this.graphCanvas) {
-            return;
-        }
-        this.graphCanvas.addEventListener('dblclick', (e)=>{
-            e.preventDefault();
-            const event = {
-                type: 'dblclick',
-                which: e.which
-            };
-            super.dispatchEvent(event);
-        });
-        this.graphCanvas.addEventListener('mousedown', (e)=>{
-            e.preventDefault();
-            if (this._resizeTimeoutId !== -1) {
-                return;
-            }
-            if (this._translating) {
-                return;
-            }
-            if (e.shiftKey) {
-                this._translating = true;
-            }
-            const cursorPos = {
-                x: e.pageX,
-                y: e.pageY
-            };
-            this._prePos = this.screenToWorld(cursorPos);
-            const event = {
-                type: 'mousedown',
-                which: e.which
-            };
-            super.dispatchEvent(event);
-        });
-        this.graphCanvas.addEventListener('mousemove', (e)=>{
-            const cursorPos = {
-                x: e.pageX,
-                y: e.pageY
-            };
-            const curPos = this.screenToWorld(cursorPos);
-            if (this._translating) {
-                this.translate({
-                    x: this._prePos.x - curPos.x,
-                    y: this._prePos.y - curPos.y
-                });
-                this._prePos = this.screenToWorld(cursorPos);
-                this._redrawFlag = true;
-            } else {
-                const event = {
-                    type: 'mousemove',
-                    which: e.which,
-                    x: curPos.x,
-                    y: curPos.y
-                };
-                super.dispatchEvent(event);
-            }
-        });
-        this.graphCanvas.addEventListener('mouseup', (e)=>{
-            this._translating = false;
-            const event = {
-                type: 'mouseup',
-                which: e.which
-            };
-            super.dispatchEvent(event);
-        });
-        this.graphCanvas.addEventListener('mousewheel', (e)=>{
-            if (this._resizeTimeoutId !== -1) {
-                return;
-            }
-            const cursorPos = {
-                x: e.pageX,
-                y: e.pageY
-            };
-            const curPos = this.screenToWorld(cursorPos);
-            const rate = e.wheelDelta > 0 ? 1 / 1.2 : 1.2;
-            this.scale(curPos, rate);
-            this._redrawFlag = true;
-        });
-        this.graphCanvas.addEventListener('resize', (e)=>{
-            if (this._resizeTimeoutId !== -1) {
-                clearTimeout(this._resizeTimeoutId);
-                this._resizeTimeoutId = -1;
-            }
-            this._resizeTimeoutId = setTimeout(()=>{
-                if (this._resizeType === 'scaleMatrix center') {
-                    this.resizeScaleCenter();
-                } else if (this._resizeType === 'scaleMatrix top left') {
-                    this.resizeScaleTopLeft();
-                } else if (this._resizeType === 'no scaleMatrix center') {
-                    this.resizeNoScaleCenter();
-                } else if (this._resizeType === 'no scaleMatrix top left') {
-                    this.resizeNoScaleTopLeft();
-                }
-                this.updateDom();
-                this._redrawFlag = true;
-                this._resizeTimeoutId = -1;
-            }, 500);
-        });
-    };
-    updateViewPort = ()=>{
-        this._vp = {
-            x: 0,
-            y: 0,
-            w: window.innerWidth * window.devicePixelRatio,
-            h: window.innerHeight * window.devicePixelRatio
-        };
-    };
-    updatePrjMatrix = ()=>{
-        const trans = translateMatrix(-this._vv.x, -this._vv.y);
-        const invTrans = translateMatrix(this._vv.x, this._vv.y);
-        const scale = scaleMatrix(this._vp.w / this._vv.w, this._vp.h / this._vv.h);
-        const invScale = scaleMatrix(this._vv.w / this._vp.w, this._vv.h / this._vp.h);
-        this._m = multiplyMatrix(scale, trans);
-        this._inv = multiplyMatrix(invTrans, invScale);
-    };
-    resizeScaleCenter = ()=>{
-        const rate = {
-            x: this._vv.w / this._vp.w,
-            y: this._vv.h / this._vp.h
-        };
-        const vvsq = {
-            x: 0,
-            y: 0,
-            size: 0
-        };
-        if (this._vv.w > this._vv.h) {
-            vvsq.y = this._vv.y;
-            vvsq.size = this._vv.h;
-            vvsq.x = this._vv.x + (this._vv.w - vvsq.size) / 2;
-        } else {
-            vvsq.x = this._vv.x;
-            vvsq.size = this._vv.w;
-            vvsq.y = this._vv.y + (this._vv.h - vvsq.size) / 2;
-        }
-        this.updateViewPort();
-        const aspect = this._vp.w / this._vp.h;
-        if (aspect > 1) {
-            this._vv.y = vvsq.y;
-            this._vv.h = vvsq.size;
-            this._vv.x = vvsq.x - vvsq.size * aspect / 2 + vvsq.size / 2;
-            this._vv.w = vvsq.size * aspect;
-        } else {
-            this._vv.x = vvsq.x;
-            this._vv.w = vvsq.size;
-            this._vv.y = vvsq.y - vvsq.size / aspect / 2 + vvsq.size / 2;
-            this._vv.h = vvsq.size / aspect;
-        }
-        this.updatePrjMatrix();
-    };
-    resizeScaleTopLeft = ()=>{
-        const rate = {
-            x: this._vv.w / this._vp.w,
-            y: this._vv.h / this._vp.h
-        };
-        const vvsq = {
-            x: 0,
-            y: 0,
-            size: 0
-        };
-        if (this._vv.w > this._vv.h) {
-            vvsq.size = this._vv.h;
-        } else {
-            vvsq.size = this._vv.w;
-        }
-        this.updateViewPort();
-        const aspect = this._vp.w / this._vp.h;
-        if (aspect > 1) {
-            this._vv.h = vvsq.size;
-            this._vv.w = vvsq.size * aspect;
-        } else {
-            this._vv.w = vvsq.size;
-            this._vv.h = vvsq.size / aspect;
-        }
-        this.updatePrjMatrix();
-    };
-    resizeNoScaleCenter = ()=>{
-        const rate = {
-            x: this._vv.w / this._vp.w,
-            y: this._vv.h / this._vp.h
-        };
-        const oldCenter = {
-            x: this._vv.x + this._vv.w / 2,
-            y: this._vv.y + this._vv.h / 2
-        };
-        this.updateViewPort();
-        this._vv.w = this._vp.w * rate.x;
-        this._vv.h = this._vp.h * rate.y;
-        this._vv.x = oldCenter.x - this._vv.w / 2;
-        this._vv.y = oldCenter.y - this._vv.h / 2;
-        this.updatePrjMatrix();
-    };
-    resizeNoScaleTopLeft = ()=>{
-        const rate = {
-            x: this._vv.w / this._vp.w,
-            y: this._vv.h / this._vp.h
-        };
-        this.updateViewPort();
-        this._vv.w = this._vp.w * rate.x;
-        this._vv.h = this._vp.h * rate.y;
-        this.updatePrjMatrix();
-    };
-    translate = (vec)=>{
-        this._vv.x += vec.x;
-        this._vv.y += vec.y;
-        this.updatePrjMatrix();
-    };
-    scale = (center, rate)=>{
-        let topLeft = {
-            x: this._vv.x,
-            y: this._vv.y
-        };
-        let mat;
-        mat = translateMatrix(-center.x, -center.y);
-        mat = multiplyMatrix(scaleMatrix(rate, rate), mat);
-        mat = multiplyMatrix(translateMatrix(center.x, center.y), mat);
-        topLeft = multiplyVector(mat, topLeft);
-        this._vv.x = topLeft.x;
-        this._vv.y = topLeft.y;
-        this._vv.w *= rate;
-        this._vv.h *= rate;
-        this.updatePrjMatrix();
-    };
-    screenToWorld = (screenPos)=>{
-        return multiplyVector(this._inv, screenPos);
-    };
-    updateDom = ()=>{
-        if (!this.graphCanvas) {
-            return;
-        }
-        this.graphCanvas.width = this._vp.w;
-        this.graphCanvas.height = this._vp.h;
-    };
-    updateView = ()=>{
-        if (!this.graphCanvas) return;
-        const ctx = this.graphCanvas.getContext('2d');
-        if (!ctx) return;
-        ctx.save();
-        ctx.clearRect(this._vv.x, this._vv.y, this._vv.w, this._vv.h);
-        ctx.setTransform(this._m[0], this._m[3], this._m[1], this._m[4], this._m[2], this._m[5]);
-    };
-    update = ()=>{
-        this.updateView();
-        this._redrawFlag = false;
-    };
-    getGraphCanvas = ()=>{
-        return this.graphCanvas;
-    };
-}
-const NodeToForceNode = (node)=>{
-    const ret = {
-        movable: true,
-        nodeHash: node.hash,
-        title: node.title,
-        thumbnail: node.thumbnail,
-        vx: 0,
-        vy: 0,
-        x: 0,
-        y: 0,
-        links: node.vector,
-        referers: node.referers
-    };
-    return ret;
-};
 const ForceGraphUpdate = (nodes, height, width)=>{
     const BOUNCE = 0.05;
     const COULOMB = 600;
@@ -3088,7 +3428,7 @@ const ForceGraphUpdate = (nodes, height, width)=>{
                 if (target.nodeHash != targetUri) {
                     const n = nodes[targetUri];
                     if (n) {
-                        Object.entries(edgeInfo).forEach(([hash6, weight])=>{
+                        Object.entries(edgeInfo).forEach(([hash4, weight])=>{
                             const distX = n.x - target.x;
                             const distY = n.y - target.y;
                             fx += BOUNCE * distX;
@@ -3118,6 +3458,82 @@ const ForceGraphUpdate = (nodes, height, width)=>{
     });
     return Object.fromEntries(ret);
 };
+const NodeToForceNode = (node)=>{
+    const ret = {
+        movable: true,
+        nodeHash: node.hash,
+        title: node.title,
+        thumbnail: node.thumbnail,
+        vx: 0,
+        vy: 0,
+        x: 0,
+        y: 0,
+        links: node.vector,
+        referers: node.referers
+    };
+    return ret;
+};
+class NoScopeGraph {
+    init = ()=>{
+    };
+    update = ()=>{
+    };
+    reload = async ()=>{
+    };
+    draw = ()=>{
+    };
+    removeDependancy = ()=>{
+    };
+}
+class ScopeGraphManager {
+    bufferSize = 10;
+    history = Array();
+    historyIndex = -1;
+    currentScopeGraph = new NoScopeGraph();
+    fetchNode = async (hash4)=>{
+        return undefined;
+    };
+    onNodeSelectedOfView = ()=>{
+    };
+    constructor(){
+    }
+    dependancyModuleInjection(canvas, store, onNodeSelectedOfView) {
+        this.canvasManager = canvas;
+        this.store = store;
+        this.onNodeSelectedOfView = onNodeSelectedOfView;
+    }
+    restart = async (hash4)=>{
+        const node = await this.store?.fetch(hash4);
+        if (isNull(node)) {
+            console.warn(\`指定ハッシュ: \${hash4} でノードをフェッチできませんでした\`);
+            return false;
+        }
+        if (isNull(this.canvasManager) || isNull(this.store) || isNull(this.onNodeSelectedOfView)) {
+            console.warn("必要な依存が注入されていません");
+            return false;
+        }
+        this.canvasManager.removeAllEventListner();
+        const scope = new SingleNodeTargetScopeGraph(node, this.store.fetch, this.canvasManager, this.onNodeSelectedOfView, this.restart);
+        if (scope) {
+            await scope.reset();
+            this.pushScope(scope);
+        }
+        return true;
+    };
+    pushScope(scope) {
+        this.currentScopeGraph.removeDependancy();
+        this.currentScopeGraph = scope;
+    }
+    update = ()=>{
+        this.currentScopeGraph.update();
+    };
+    draw = ()=>{
+        this.currentScopeGraph.draw();
+    };
+    currentScopeReload = async ()=>{
+        await this.currentScopeGraph.reload();
+    };
+}
 class SingleNodeTargetScopeGraph {
     graphNodes = {
     };
@@ -3126,13 +3542,13 @@ class SingleNodeTargetScopeGraph {
     graphId = -1;
     isRebuilding = false;
     updataing = false;
-    constructor(target, fetchNode1 = async (uri)=>{
+    constructor(target, fetchNode3 = async (uri)=>{
         return undefined;
-    }, canvasManager, onNodeSelectedOfView1, nextGraphRender){
+    }, canvasManager, onNodeSelectedOfView, nextGraphRender){
         this.target = target;
-        this.fetchNode = fetchNode1;
+        this.fetchNode = fetchNode3;
         this.canvasManager = canvasManager;
-        this.onNodeSelectedOfView = onNodeSelectedOfView1;
+        this.onNodeSelectedOfView = onNodeSelectedOfView;
         this.nextGraphRender = nextGraphRender;
         if (target.hash != "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446") {
             this.nodes[target.hash] = NodeToForceNode(target);
@@ -3168,8 +3584,8 @@ class SingleNodeTargetScopeGraph {
             criteria.movable = false;
             tempNodeDict[this.target.hash] = criteria;
         }
-        for await (const [hash6, edge] of links){
-            const a = await this.fetchNode(hash6);
+        for await (const [hash4, edge] of links){
+            const a = await this.fetchNode(hash4);
             if (a) {
                 if (a.hash != "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446") {
                     tempNodeDict[a.hash] = NodeToForceNode(a);
@@ -3222,14 +3638,14 @@ class SingleNodeTargetScopeGraph {
         }
     };
     ToStableGraph = ()=>{
-        Object.entries(this.graphNodes).forEach(([hash6, graphNode])=>{
-            this.nodes[hash6].x = graphNode.x;
-            this.nodes[hash6].y = graphNode.y;
+        Object.entries(this.graphNodes).forEach(([hash4, graphNode])=>{
+            this.nodes[hash4].x = graphNode.x;
+            this.nodes[hash4].y = graphNode.y;
         });
         this.nodes = ForceGraphUpdate(this.nodes, this.canvasManager.height(), this.canvasManager.width());
-        Object.entries(this.nodes).forEach(([hash6, node])=>{
-            this.graphNodes[hash6].x = node.x;
-            this.graphNodes[hash6].y = node.y;
+        Object.entries(this.nodes).forEach(([hash4, node])=>{
+            this.graphNodes[hash4].x = node.x;
+            this.graphNodes[hash4].y = node.y;
         });
     };
     rebuildGraph = (beforeNodeDict, nodes)=>{
@@ -3273,461 +3689,106 @@ class SingleNodeTargetScopeGraph {
         this.isRebuilding = false;
     };
 }
-class NoScopeGraph {
+const viewerRequestOfRemoteGet = async (hash4, force = false)=>{
+    const pathStruct = metaResourcePath(hash4);
+    if (remoteStorageURL == "") {
+        console.warn(\`\n    リモートストレージパスが設定されていません。\n    HTML内で下記の例のようにノード情報の配置場所を定義してください。\n    例:\n    var remoteStorageURL = "https://raw.githubusercontent.com/ArbaVojaganto/hogeRepository/main/"\n    \`);
+    }
+    const path = remoteStorageURL + pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
+    const response = await GetRequest(path);
+    if (isNull(response)) return [];
+    const json = await response.json();
+    console.log(json);
+    if (Node1.validation(json)) {
+        console.log(\`remoteGet: \${json}\`);
+        const nodeArray = [
+            json
+        ];
+        return nodeArray;
+    } else {
+        console.warn("Nodeとして解釈できないものを取得しました");
+        return [];
+    }
+};
+class ViewerApplication {
+    store = new StoredNodes();
+    scopeGraphHistory = new ScopeGraphManager();
+    updateFunctions = [];
+    constructor(document2, containerNode){
+        this.document = document2;
+        this.containerNode = containerNode;
+        this.store.setRemoteGetMethod(viewerRequestOfRemoteGet);
+        this.scopeGraphHistory = new ScopeGraphManager();
+        this.canvasManager = new CanvasManager(this.document, this.containerNode);
+    }
     init = ()=>{
-    };
-    update = ()=>{
+        if (isNull(this.canvasManager) || isNull(this.canvasManager.graphCanvas)) return;
+        this.canvasManager.init();
+        const entryPoint = bufferToHash("entryPoint");
+        const n = entryPoint;
+        this.scopeGraphHistory.dependancyModuleInjection(this.canvasManager, this.store, this.activateNode);
+        this.scopeGraphHistory.restart(n);
+        this.update();
+        this.globalMenu = GlobalMenu.init(this.document, this.containerNode, this.reload, this.scopeGraphHistory);
+        customElements.define('localmenu-div', LocalMenu, {
+            extends: 'div'
+        });
+        customElements.define('node-detail-div', ReadOnlyNodeDetail, {
+            extends: 'div'
+        });
     };
     reload = async ()=>{
-    };
-    draw = ()=>{
-    };
-    removeDependancy = ()=>{
-    };
-}
-class ScopeGraphManager {
-    bufferSize = 10;
-    history = Array();
-    historyIndex = -1;
-    currentScopeGraph = new NoScopeGraph();
-    fetchNode = async (hash6)=>{
-        return undefined;
-    };
-    onNodeSelectedOfView = ()=>{
-    };
-    constructor(){
-    }
-    dependancyModuleInjection(canvas, store, onNodeSelectedOfView) {
-        this.canvasManager = canvas;
-        this.store = store;
-        this.onNodeSelectedOfView = onNodeSelectedOfView;
-    }
-    restart = async (hash6)=>{
-        const node = await this.store?.fetch(hash6);
-        if (isNull(node)) {
-            console.warn(\`指定ハッシュ: \${hash6} でノードをフェッチできませんでした\`);
-            return false;
+        await this.scopeGraphHistory.currentScopeReload();
+        if (!isNull(this.localMenu)) {
+            this.localMenu.reloadDetail();
         }
-        if (isNull(this.canvasManager) || isNull(this.store) || isNull(this.onNodeSelectedOfView)) {
-            console.warn("必要な依存が注入されていません");
-            return false;
-        }
-        this.canvasManager.removeAllEventListner();
-        const scope = new SingleNodeTargetScopeGraph(node, this.store.fetch, this.canvasManager, this.onNodeSelectedOfView, this.restart);
-        if (scope) {
-            await scope.reset();
-            this.pushScope(scope);
-        }
-        return true;
     };
-    pushScope(scope) {
-        this.currentScopeGraph.removeDependancy();
-        this.currentScopeGraph = scope;
-    }
+    activateNode = (node)=>{
+        if (isNull(this.localMenu)) {
+            this.localMenu = new LocalMenu(this.store.tagHashDict, this.store.fetch, this.store.update, this.reload);
+            this.containerNode.appendChild(this.localMenu);
+        }
+        this.localMenu.setDetail(node);
+    };
+    setUpdateFunction = (fn)=>{
+        this.updateFunctions.push(fn);
+    };
     update = ()=>{
-        this.currentScopeGraph.update();
-    };
-    draw = ()=>{
-        this.currentScopeGraph.draw();
-    };
-    currentScopeReload = async ()=>{
-        await this.currentScopeGraph.reload();
+        this.canvasManager?.update();
+        this.scopeGraphHistory.update();
+        this.scopeGraphHistory.draw();
+        this.updateFunctions.forEach((e)=>{
+            e();
+        });
+        requestAnimationFrame(this.update);
     };
 }
-class StoredNodes {
-    dict = {
-    };
-    onRegister = ()=>{
-    };
-    constructor(){
+class LocalMenu extends HTMLDivElement {
+    constructor(tagHashDict1, fetchNode4, updateNode1, reload2){
+        super();
+        this.fetchNode = fetchNode4;
+        this.updateNode = updateNode1;
+        this.reload = reload2;
+        this.id = "network-graph-local-menu";
+        this.detail = new ReadOnlyNodeDetail(this.fetchNode);
+        this.appendChild(this.detail);
     }
-    tagHashDict = ()=>{
-        return Object.fromEntries(Object.entries(this.dict).filter(([key2, value])=>value.type == "TagMeta"
-        ).map(([key2, value])=>[
-                value.title,
-                value
-            ]
-        ));
-    };
-    blobHashDict = ()=>{
-        return Object.fromEntries(Object.entries(this.dict).filter(([key2, value])=>value.type == "BlobMeta"
-        ));
-    };
-    fetch = async (hash6)=>{
-        if (!this.dict[hash6]) {
-            const updateNodes = await this.remoteGet(hash6);
-            updateNodes.forEach((e)=>this.cache(e)
-            );
-        }
-        return this.dict[hash6];
-    };
-    update = async (node, optionFormData)=>{
-        if (JSON.stringify(node) != JSON.stringify(this.dict[node.hash])) {
-            const updateNodes = await this.remotePut(node, optionFormData);
-            updateNodes.forEach((e)=>this.cache(e)
-            );
-            return updateNodes;
-        } else {
-            return [];
-        }
-    };
-    remotePut = async (node, optionFormData)=>{
-        optionFormData.set("meta", JSON.stringify(node));
-        console.log({
-            ...optionFormData
-        });
-        const response = await PutRequest("/posts/" + node.hash, optionFormData);
-        if (isNull(response)) return [];
-        const json = await response.json();
-        console.log(json);
-        const nodes = Object.values(json).filter((node1)=>{
-            const result = Node1.validation(node1);
-            if (!result) throw new Error('バリデーション不能なjsonが混入しています');
-            return result;
-        });
-        return nodes;
-    };
-    cache = (e)=>{
-        this.dict[e.hash] = e;
-        this.onRegister();
-    };
-    setRemoteGetMethod = (method)=>{
-        this.remoteGet = method;
-    };
-    remoteGet = async (hash6, force = false)=>{
-        const pathStruct = metaResourcePath(hash6);
-        const path = pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
-        const response = await GetRequest(path);
-        if (isNull(response)) return [];
-        const json = await response.json();
-        console.log(json);
-        if (Node1.validation(json)) {
-            console.log(\`remoteGet: \${json}\`);
-            const nodeArray = [
-                json
-            ];
-            return nodeArray;
-        } else {
-            console.warn("Nodeとして解釈できないものを取得しました");
-            return [];
-        }
-    };
-}
-class SingleFileUploader {
-    constructor(document1, parentNode, updateNode, reload4){
-        this.document = document1;
-        this.parentNode = parentNode;
-        this.updateNode = updateNode;
-        this.reload = reload4;
-        this.baseElement = document1.createElement("div");
-        const a = this.baseElement;
-        a.id = "file-uploader";
-        parentNode.appendChild(a);
-        this.fileArea = document1.createElement("input");
-        this.fileArea.setAttribute("type", "file");
-        this.fileArea.onchange = this.jsonUpdateWhenFileSelect;
-        a.appendChild(this.fileArea);
-        this.requestButton = CreateInputButton(document1, "send", this.sendCallback);
-        a.appendChild(this.requestButton);
-        this.textArea = CreateTextArea(document1, '{"title": "", "content": ""}', 30, 10);
-        a.appendChild(this.textArea);
-        this.previewArea = document1.createElement("img");
-        this.previewArea.classList.add("uploaderPreview");
-        a.appendChild(this.previewArea);
-        a.addEventListener('drop', this.dropCallback);
-        a.addEventListener('dragover', function(evt) {
-            evt.preventDefault();
-            a.classList.add('dragover');
-        });
-        a.addEventListener('dragleave', function(evt) {
-            evt.preventDefault();
-            a.classList.remove('dragover');
-        });
-        this.previewCanvas = document1.createElement('canvas');
-        this.previewCanvas.classList.add("uploaderPreview");
+    setDetail(node) {
+        if (isNull(this.detail)) return;
+        this.detail.setDetail(node);
     }
-    dropCallback = async (evt)=>{
-        if (isNull(evt.dataTransfer) || isNull(this.textArea) || isNull(this.fileArea) || isNull(this.baseElement)) {
-            return;
+    reloadDetail() {
+        if (!isNull(this.detail)) {
+            this.detail.reloadDetail();
         }
-        const dataTransfer = evt.dataTransfer;
-        const a1 = this.baseElement;
-        evt.preventDefault();
-        a1.classList.remove('dragenter');
-        const types = dataTransfer.types;
-        const fileArea = this.fileArea;
-        if (isNull(fileArea)) {
-            console.error(\`jsonを更新しようとしたがfileArea要素が存在しないよ\`);
-            return;
-        }
-        const entries = types.map((type)=>{
-            return [
-                type,
-                dataTransfer.getData(type)
-            ];
-        });
-        for await (const [type, value] of entries){
-            switch(type){
-                case "text/html":
-                    {
-                        break;
-                    }
-                case "Files":
-                    {
-                        this.setFiles(dataTransfer.files);
-                        break;
-                    }
-                case "text/plain":
-                    {
-                        break;
-                    }
-                case "text/uri-list":
-                    {
-                        const response = await GetRequest(value);
-                        if (isNull(response)) {
-                            console.warn(\`responseが正しく取得できなかったので無視します\`);
-                            break;
-                        }
-                        const contentType = response.headers.get("content-type");
-                        if (isNull(contentType)) {
-                            console.warn(\`responseヘッダにcontent-typeが入っていないので無視します\`);
-                            break;
-                        }
-                        const mimeType1 = ContentTypeToMimeType(contentType);
-                        if (isNull(mimeType1)) {
-                            console.warn(\`\${contentType}からmimeTypeを取得できませんでした\`);
-                            break;
-                        }
-                        switch(mimeType1){
-                            case "image/png":
-                            case "image/gif":
-                            case "image/jpeg":
-                                {
-                                    const blob2 = await response.blob();
-                                    if (isNull(blob2)) {
-                                        console.warn(\`blobとして解釈できない\`);
-                                        break;
-                                    }
-                                    console.log("ドロップオブジェクトはシングルバイナリと解釈できたよ");
-                                    this.setBlob(blob2);
-                                    break;
-                                }
-                            case "text/html":
-                                {
-                                    const html = await response.text();
-                                    if (isNull(html)) {
-                                        console.warn(\`textとして解釈できない\`);
-                                    }
-                                    console.log("ドロップオブジェクトはHTMLと解釈できたよ");
-                                    const parser = new DOMParser();
-                                    const document2 = parser.parseFromString(html, mimeType1);
-                                    const imgs = document2.querySelectorAll("img");
-                                    const uris = [];
-                                    imgs.forEach((image)=>{
-                                        uris.push(image.src);
-                                    });
-                                    console.log(uris);
-                                    for await (const uri of uris){
-                                        const response1 = await GetRequest(value);
-                                        const blob2 = await response1?.blob();
-                                        if (blob2) {
-                                            console.log(blob2);
-                                            if (MIMEtoExtentionMap[blob2.type]) {
-                                            }
-                                        }
-                                    }
-                                    break;
-                                }
-                            default:
-                                {
-                                    console.warn(\`\${contentType}はレスポンスのmimeTypeとして許容できません\`);
-                                    break;
-                                }
-                        }
-                        break;
-                    }
-                default:
-                    {
-                        console.log(\`対応外のMIMEタイプがレスポンスとして渡されましたよ...\${type}\`);
-                        break;
-                    }
-            }
-        }
-    };
-    setBlob = (blob2)=>{
-        const file = new File([
-            blob2
-        ], mod.generate(), {
-            type: blob2.type
-        });
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        this.setFiles(dt.files);
-    };
-    setFiles = (files)=>{
-        if (isNull(this.fileArea)) return;
-        this.fileArea.files = files;
-        this.onChangeJsonUpdateWhenFileSelect(files);
-    };
-    sendCallback = async ()=>{
-        if (isNull(this.textArea)) return;
-        if (isNull(this.fileArea)) return;
-        if (isNull(this.fileArea.files)) return;
-        const node = JSON.parse(this.textArea.value);
-        if (!BlobMeta.validation(node)) {
-            console.warn(\`blobmetaと解釈できませんでした \${node}\`);
-            return;
-        }
-        const formData = new FormData();
-        formData.set("meta", JSON.stringify(this.textArea.value));
-        formData.set("file", this.fileArea.files[0]);
-        const result = await this.updateNode(node, formData);
-        if (result.length) {
-            this.reload();
-            return result;
-        } else {
-            return undefined;
-        }
-    };
-    jsonUpdateWhenFileSelect = (value)=>{
-        const files = value.currentTarget.files;
-        this.onChangeJsonUpdateWhenFileSelect(files);
-    };
-    onChangeJsonUpdateWhenFileSelect = async (files)=>{
-        if (files.length <= 0) return;
-        const file = files[0];
-        const splitedName = splitFileName(file.name);
-        const extention1 = isNull(splitedName.extention) || splitedName.extention == "" ? MIMEtoExtentionMap[file.type] : splitedName.extention;
-        if (isNull(extention1)) {
-            console.error(\`シングルバイナリの拡張子が推測できなかった...\`);
-            return;
-        }
-        const buffer = await file.arrayBuffer();
-        const hash6 = bufferToHash(buffer);
-        const meta = new BlobMeta(hash6, splitedName.name, extention1, "", "", "", {
-        }, file.type, "");
-        if (this.textArea) {
-            this.textArea.value = JSON.stringify(meta);
-        }
-        const blobUrl = window.URL.createObjectURL(file);
-        if (this.previewArea) {
-            this.previewArea.src = blobUrl;
-        }
-        const createThumbnailAndPrepareJson = ()=>{
-            const ctx = this.previewCanvas?.getContext('2d');
-            if (isNull(this.previewCanvas) || isNull(ctx)) return;
-            const size = 100;
-            let rate = img.height / img.width;
-            let width = 100;
-            let height = 100 * rate;
-            if (img.width < img.height) {
-                rate = img.width / img.height;
-                width = size * rate;
-                height = size;
-            } else {
-                rate = img.height / img.width;
-                width = size;
-                height = size * rate;
-            }
-            this.previewCanvas.width = width;
-            this.previewCanvas.height = height;
-            ctx.drawImage(img, 0, 0, width * rate, height);
-            ctx.clearRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, width, height);
-            const b64 = this.previewCanvas.toDataURL('image/png');
-            meta.thumbnail = b64;
-            if (this.textArea) {
-                this.textArea.value = JSON.stringify(meta);
-            }
-        };
-        const img = new Image();
-        img.src = blobUrl;
-        img.onload = createThumbnailAndPrepareJson;
-    };
+    }
 }
-const ContentTypeToMimeType = (contentType)=>{
-    return Object.entries(MIMEtoExtentionMap).filter(([key2, value])=>{
-        return contentType.includes(key2);
-    })[0][0];
-};
-const MIMEtoExtentionMap = {
-    "text/html": ".html",
-    "image/png": ".png",
-    "image/jpeg": ".jpeg",
-    "image/gif": ".gif"
-};
-const createAccordionMenu = (menuLabel, childs)=>{
-    const ulroot = document.createElement('ul');
-    const li = document.createElement('li');
-    ulroot.appendChild(li);
-    const label = document.createElement('label');
-    label.innerText = menuLabel;
-    li.appendChild(label);
-    const accordion = document.createElement('input');
-    accordion.type = 'checkbox';
-    accordion.classList.add('toggle');
-    li.appendChild(accordion);
-    const ul = document.createElement('ul');
-    ul.classList.add('accordion-child');
-    li.appendChild(ul);
-    childs.forEach((e)=>{
-        const childli = document.createElement('li');
-        childli.appendChild(e);
-        ul.appendChild(childli);
-    });
-    return ulroot;
-};
-class GlobalMenu1 {
-    tagDict = {
-    };
-    constructor(document3, rootNode1, tagNameInput, requestButton, reload1, updateNode1, tagHashDict, scopeManager){
+class GlobalMenu {
+    constructor(document3, rootNode1, reload3, scopeManager){
         this.document = document3;
         this.rootNode = rootNode1;
-        this.tagNameInput = tagNameInput;
-        this.requestButton = requestButton;
-        this.reload = reload1;
-        this.updateNode = updateNode1;
-        this.tagHashDict = tagHashDict;
+        this.reload = reload3;
         this.scopeManager = scopeManager;
-        rootNode1.appendChild(tagNameInput);
-        rootNode1.appendChild(requestButton);
-        requestButton.onclick = this.addTagRequest;
-        const createSymbolNodeRequsetUI = ()=>{
-            const childs = [];
-            const title4 = document3.createElement('input');
-            title4.placeholder = "title: required";
-            childs.push(title4);
-            const remoteUri4 = document3.createElement('input');
-            remoteUri4.placeholder = "remoteUri: optional";
-            childs.push(remoteUri4);
-            const description4 = document3.createElement('input');
-            description4.placeholder = "description: optional";
-            childs.push(description4);
-            const requestButton1 = document3.createElement('button');
-            requestButton1.innerText = "create";
-            childs.push(requestButton1);
-            requestButton1.onclick = async ()=>{
-                if (title4.value == "") return;
-                const symbol = new SymbolNode("", title4.value, "", "", description4.value, {
-                }, remoteUri4.value);
-                const formData = new FormData();
-                const resultNodes = await this.updateNode(symbol, formData);
-                if (resultNodes.length == 0) {
-                    return;
-                }
-                this.reload();
-            };
-            const menu = createAccordionMenu("createSymbolNode: ", childs);
-            return menu;
-        };
-        rootNode1.appendChild(createSymbolNodeRequsetUI());
-        this.fileUploader = new SingleFileUploader(document3, rootNode1, updateNode1, reload1);
-        if (this.fileUploader.baseElement) {
-            const menu = createAccordionMenu("singleFileUploader: ", [
-                this.fileUploader.baseElement
-            ]);
-            rootNode1.appendChild(menu);
-        }
         const toAllScope = document3.createElement("button");
         toAllScope.onclick = ()=>{
             this.scopeManager?.restart(bufferToHash("node"));
@@ -3756,523 +3817,12 @@ class GlobalMenu1 {
         toTodayScope.innerText = \`toTodayScope\`;
         rootNode1.appendChild(toTodayScope);
     }
-    updateTagDatalist = (datalist)=>{
-        const dl = this.tagNameInput.firstChild;
-        if (isNull(dl)) return;
-        while(dl.firstChild){
-            dl.removeChild(dl.firstChild);
-        }
-        datalist.forEach((e)=>{
-            const option = this.document.createElement('option');
-            option.value = e;
-            dl.appendChild(option);
-        });
-    };
-    addTagRequest = async (e)=>{
-        if (this.tagNameInput.value == "") return;
-        const tag = new TagMeta("", this.tagNameInput.value, "", "", "", {
-        }, "");
-        const formData = new FormData();
-        formData.set("meta", JSON.stringify(tag));
-        const resultNodes = await this.updateNode(tag, formData);
-        if (resultNodes.length == 0) {
-            return;
-        }
-        this.reload();
-        this.tagDict = this.tagHashDict();
-        const datalist = Object.values(this.tagDict).map((e1)=>e1.title
-        );
-        this.updateTagDatalist(datalist);
-    };
-    static init = (document4, rootElement, reload2, tagHashDict1, updateNode2, scopeManager1)=>{
+    static init = (document4, rootElement, reload4, scopeManager1)=>{
         const globalMenu = document4.createElement("div");
         if (isNull(globalMenu)) return undefined;
         globalMenu.id = "network-graph-global-menu";
         rootElement.appendChild(globalMenu);
-        const tagDict = tagHashDict1();
-        const datalist = Object.values(tagDict).map((e)=>e.title
-        );
-        const tagNameInput1 = CreateAutocompleteInput(document4, "tag-names", datalist);
-        if (isNull(tagNameInput1)) return undefined;
-        const requestButton1 = CreateInputButton(document4, "generate TagNode");
-        if (isNull(requestButton1)) return undefined;
-        const i2 = new GlobalMenu1(document4, globalMenu, tagNameInput1, requestButton1, reload2, updateNode2, tagHashDict1, scopeManager1);
-        return i2;
-    };
-}
-const parseHtmlElement = (element)=>{
-    const a1 = {
-    };
-    for(let i2 = 0; i2 < element.children.length; i2++){
-        const e = element.children[i2];
-        if (e.innerText && e.innerText != "") {
-            a1[e.innerText] = e.firstChild.value;
-        } else {
-        }
-    }
-};
-const UListToNode = (html)=>{
-    const a1 = parseHtmlElement(html);
-    if (Node1.validation(a1)) {
-        return a1;
-    } else {
-        return undefined;
-    }
-};
-const objToRecurisveAccordionMenu = (document4, obj)=>{
-    const root = document4.createElement('ul');
-    root.classList.add('accordion-child');
-    Object.entries(obj).forEach(([key2, value])=>{
-        const li = document4.createElement('li');
-        const label = document4.createElement('label');
-        label.innerText = \`\${key2.substring(0, 10)}: \`;
-        li.appendChild(label);
-        if (typeof value == 'object') {
-            const accordion = document4.createElement('input');
-            accordion.type = 'checkbox';
-            accordion.classList.add('toggle');
-            li.appendChild(accordion);
-            const ul = objToRecurisveAccordionMenu(document4, value);
-            li.appendChild(ul);
-        } else if (typeof value == 'string' || typeof value == 'number') {
-            const child = document4.createElement('input');
-            child.value = value.toString();
-            li.appendChild(child);
-        }
-        root.appendChild(li);
-    });
-    return root;
-};
-const objToRecursiveUList = (document4, obj)=>{
-    const ul = document4.createElement('ul');
-    Object.entries(obj).forEach(([key2, value])=>{
-        const li = document4.createElement('li');
-        li.innerText = key2.substring(0, 10) + ": ";
-        if (typeof value == 'object') {
-            const objElement = objToRecursiveUList(document4, value);
-            li.appendChild(objElement);
-        } else if (typeof value == 'string' || typeof value == 'number') {
-            const child = document4.createElement('input');
-            child.value = value.toString();
-            li.appendChild(child);
-        }
-        ul.appendChild(li);
-    });
-    return ul;
-};
-const nodeToRecursiveUList = (document4, node)=>{
-    return objToRecursiveUList(document4, node);
-};
-class LocalMenu extends HTMLDivElement {
-    constructor(tagHashDict1, fetchNode2, updateNode2, reload2){
-        super();
-        this.fetchNode = fetchNode2;
-        this.updateNode = updateNode2;
-        this.reload = reload2;
-        this.id = "network-graph-local-menu";
-        const tagDict = tagHashDict1();
-        const datalist = Object.values(tagDict).map((e)=>e.title
-        );
-        const tagSelector = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
-        const tagAdder = CreateInputButton(document, "tagInsert", ()=>{
-        });
-        this.detail = new NodeDetail(document.createElement('p'), document.createElement('p'), document.createElement('a'), document.createElement('a'), document.createElement('a'), document.createElement('textarea'), document.createElement('img'), tagSelector, tagAdder, document.createElement('ul'), tagHashDict1, fetchNode2, updateNode2, reload2);
-        this.appendChild(this.detail);
-    }
-    setDetail(node) {
-        if (isNull(this.detail)) return;
-        this.detail.setDetail(node);
-    }
-    reloadDetail() {
-        if (!isNull(this.detail)) {
-            this.detail.reloadDetail();
-        }
-    }
-}
-class NodeDetail extends HTMLDivElement {
-    constructor(titleElement, descriptionElement, remoteLinkElement, downloadLinkElement, orgmodeLinkElement, jsonTextAreaElement, thumbnailElement, tagSelectorElement, tagInserterButtonElement, tagListElement, tagHashDict2, fetchNode3, updateNode3, reload3){
-        super();
-        this.titleElement = titleElement;
-        this.descriptionElement = descriptionElement;
-        this.remoteLinkElement = remoteLinkElement;
-        this.downloadLinkElement = downloadLinkElement;
-        this.orgmodeLinkElement = orgmodeLinkElement;
-        this.jsonTextAreaElement = jsonTextAreaElement;
-        this.thumbnailElement = thumbnailElement;
-        this.tagSelectorElement = tagSelectorElement;
-        this.tagInserterButtonElement = tagInserterButtonElement;
-        this.tagListElement = tagListElement;
-        this.tagHashDict = tagHashDict2;
-        this.fetchNode = fetchNode3;
-        this.updateNode = updateNode3;
-        this.reload = reload3;
-        this.classList.add("node-detail");
-        this.thumbnailElement.classList.add("thumbnail");
-        this.thumbnailElement.hidden = true;
-        this.appendChild(this.thumbnailElement);
-        this.titleElement.innerText = "title";
-        this.appendChild(this.titleElement);
-        this.descriptionElement.innerText = "description";
-        this.appendChild(this.descriptionElement);
-        this.remoteLinkElement.href = "remoteLink";
-        this.appendChild(this.remoteLinkElement);
-        this.downloadLinkElement.href = "download";
-        this.appendChild(this.downloadLinkElement);
-        this.orgmodeLinkElement.href = "#";
-        const textNode = document.createTextNode("This is orgmode link");
-        this.orgmodeLinkElement.appendChild(textNode);
-        this.orgmodeLinkElement.title = "This is orgmode link";
-        this.appendChild(this.orgmodeLinkElement);
-        const modal = document.getElementById('modal');
-        const mask = document.getElementById('mask');
-        this.modalOpenElement = document.createElement("div");
-        if (modal != null && mask != null && !isNull(this.modalOpenElement)) {
-            this.modalOpenElement.id = "open";
-            this.modalOpenElement.innerText = "click";
-            this.modalOpenElement.onclick = ()=>{
-                modal.classList.remove('hidden');
-                mask.classList.remove('hidden');
-            };
-            mask.onclick = ()=>{
-                modal.classList.add('hidden');
-                mask.classList.add('hidden');
-            };
-            this.appendChild(this.modalOpenElement);
-            this.modalWindowElement = modal;
-        }
-        this.remoteOpenOrgElement = document.createElement("div");
-        this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
-        this.appendChild(this.remoteOpenOrgElement);
-        this.remoteOpenBlobElement = document.createElement("div");
-        this.remoteOpenBlobElement.innerText = "xdgOpenBlob";
-        this.appendChild(this.remoteOpenBlobElement);
-        this.remoteOpenMetaElement = document.createElement("div");
-        this.remoteOpenMetaElement.innerText = "xdgOpenMeta";
-        this.appendChild(this.remoteOpenMetaElement);
-        this.appendChild(this.tagListElement);
-        this.appendChild(this.tagSelectorElement);
-        this.tagInserterButtonElement.onclick = this.insertTag;
-        this.appendChild(this.tagInserterButtonElement);
-        this.jsonTextAreaElement.value = "json";
-        this.appendChild(this.jsonTextAreaElement);
-    }
-    insertTag = async ()=>{
-        const node = JSON.parse(this.jsonTextAreaElement.value);
-        const tag = this.tagHashDict()[this.tagSelectorElement.value];
-        if (Node1.validation(node)) {
-            const index = tag.hash;
-            node.vector[index] = node.vector[index] ?? {
-            };
-            node.vector[index]["tag"] = 1;
-            this.jsonTextAreaElement.value = JSON.stringify(node);
-            await this.updateNode(node, new FormData);
-            this.reload();
-        }
-    };
-    reloadDetail = async ()=>{
-        if (this.currentNode) {
-            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
-            if (!isNull(remoteLatestNode)) {
-                this.setDetail(remoteLatestNode);
-            }
-        }
-    };
-    setDetail(node) {
-        this.titleElement.innerText = node.title.substring(0, 10);
-        this.descriptionElement.innerText = node.description;
-        const orgPathData = orgmodeResourcePath(node.hash);
-        this.orgmodeLinkElement.href = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-        this.downloadLinkElement.href = "にゃーん";
-        this.downloadLinkElement.textContent = "ダウンロード";
-        this.jsonTextAreaElement.value = JSON.stringify(node);
-        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
-            const blobPathData = blobResourcePath(node.hash);
-            this.thumbnailElement.src = blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-            this.thumbnailElement.hidden = false;
-        } else {
-            if (node.thumbnail == "") {
-                this.thumbnailElement.hidden = true;
-            } else {
-                this.thumbnailElement.src = node.thumbnail;
-                this.thumbnailElement.hidden = false;
-            }
-        }
-        if (this.modalWindowElement) {
-            while(this.modalWindowElement.firstChild){
-                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
-            }
-            const iframe = document.createElement("iframe");
-            iframe.src = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-            this.modalWindowElement.appendChild(iframe);
-        }
-        const PathElement = (name, copyString, onClickRequestPath)=>{
-            const elems = [];
-            const copy = document.createElement("button");
-            copy.onclick = ()=>{
-                textToClipBoard(document, copyString);
-            };
-            copy.innerText = \`\${name}: pathToClipboard\`;
-            elems.push(copy);
-            const request = document.createElement("button");
-            request.onclick = ()=>{
-                GetRequest(onClickRequestPath);
-            };
-            request.innerText = \`\${name}: remoteXdgOpen\`;
-            elems.push(request);
-            return elems;
-        };
-        if (this.remoteOpenOrgElement) {
-            removeAllChild(this.remoteOpenOrgElement);
-            const xdgOpenOrgPath = "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-            const elems = PathElement("org", "/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention, xdgOpenOrgPath);
-            elems.forEach((e)=>{
-                if (this.remoteOpenOrgElement) {
-                    this.remoteOpenOrgElement.appendChild(e);
-                }
-            });
-        }
-        if (this.remoteOpenBlobElement) {
-            if (BlobMeta.validation(node)) {
-                removeAllChild(this.remoteOpenBlobElement);
-                const blobPathData = blobResourcePath(node.hash);
-                const xdgOpenBlobPath = "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-                const elems = PathElement("blob", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
-                elems.forEach((e)=>{
-                    if (this.remoteOpenBlobElement) {
-                        this.remoteOpenBlobElement.appendChild(e);
-                    }
-                });
-                this.remoteOpenBlobElement.hidden = false;
-            } else {
-                this.remoteOpenBlobElement.hidden = true;
-            }
-        }
-        if (this.remoteOpenMetaElement) {
-            removeAllChild(this.remoteOpenMetaElement);
-            const metaPathData = metaResourcePath(node.hash);
-            const xdgOpenMetaPath = "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
-            const elems = PathElement("json", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
-            elems.forEach((e)=>{
-                if (this.remoteOpenMetaElement) {
-                    this.remoteOpenMetaElement.appendChild(e);
-                }
-            });
-        }
-        while(this.tagListElement.firstChild){
-            this.tagListElement.removeChild(this.tagListElement.firstChild);
-        }
-        const ul = this.tagListElement;
-        Object.entries(node.vector).forEach(async ([target1, label])=>{
-            const node = await this.fetchNode(target1);
-            if (node) {
-                const li = document.createElement('li');
-                li.innerText = node.title;
-                ul.appendChild(li);
-            }
-        });
-        ul.appendChild(objToRecurisveAccordionMenu(document, node));
-        this.reloadTagSelectorDataList();
-        this.currentNode = node;
-    }
-    reloadTagSelectorDataList = ()=>{
-        const tagDict1 = this.tagHashDict();
-        const datalist1 = Object.values(tagDict1).map((e)=>e.title
-        );
-        const tagSelector1 = CreateAutocompleteInput(document, "li-tag-datalist", datalist1);
-        const dl = document.getElementById("li-tag-datalist");
-        if (!isNull(dl)) {
-            while(dl.firstChild){
-                dl.removeChild(dl.firstChild);
-            }
-            datalist1.forEach((e)=>{
-                let option = document.createElement('option');
-                option.value = e;
-                dl.appendChild(option);
-            });
-        }
-    };
-}
-class EditorApplication {
-    store = new StoredNodes();
-    scopeGraphHistory = new ScopeGraphManager();
-    updateFunctions = [];
-    constructor(document4, containerNode){
-        this.document = document4;
-        this.containerNode = containerNode;
-        this.scopeGraphHistory = new ScopeGraphManager();
-        this.canvasManager = new CanvasManager(this.document, this.containerNode);
-    }
-    init = ()=>{
-        if (isNull(this.canvasManager) || isNull(this.canvasManager.graphCanvas)) return;
-        this.canvasManager.init();
-        const entryPoint = bufferToHash("entryPoint");
-        const n = entryPoint;
-        this.scopeGraphHistory.dependancyModuleInjection(this.canvasManager, this.store, this.activateNode);
-        this.scopeGraphHistory.restart(n);
-        this.update();
-        this.globalMenu = GlobalMenu1.init(this.document, this.containerNode, this.reload, this.store.tagHashDict, this.store.update, this.scopeGraphHistory);
-        customElements.define('localmenu-div', LocalMenu, {
-            extends: 'div'
-        });
-        customElements.define('node-detail-div', NodeDetail, {
-            extends: 'div'
-        });
-    };
-    reload = async ()=>{
-        await this.scopeGraphHistory.currentScopeReload();
-        if (!isNull(this.localMenu)) {
-            this.localMenu.reloadDetail();
-        }
-    };
-    activateNode = (node)=>{
-        if (isNull(this.localMenu)) {
-            this.localMenu = new LocalMenu(this.store.tagHashDict, this.store.fetch, this.store.update, this.reload);
-            this.containerNode.appendChild(this.localMenu);
-        }
-        this.localMenu.setDetail(node);
-    };
-    setUpdateFunction = (fn)=>{
-        this.updateFunctions.push(fn);
-    };
-    update = ()=>{
-        this.canvasManager?.update();
-        this.scopeGraphHistory.update();
-        this.scopeGraphHistory.draw();
-        this.updateFunctions.forEach((e)=>{
-            e();
-        });
-        requestAnimationFrame(this.update);
-    };
-}
-const textToClipBoard = (document5, text2)=>{
-    const tempElement = document5.createElement("textarea");
-    tempElement.textContent = text2;
-    document5.body.appendChild(tempElement);
-    document5.getSelection()?.selectAllChildren(tempElement);
-    tempElement.select();
-    var success = document5.execCommand('copy');
-    document5.body.removeChild(tempElement);
-    return success;
-};
-const removeAllChild = (target1)=>{
-    while(target1.firstChild){
-        target1.removeChild(target1.firstChild);
-    }
-};
-const viewerRequestOfRemoteGet = async (hash6, force = false)=>{
-    const pathStruct = metaResourcePath(hash6);
-    if (remoteStorageURL == "") {
-        console.warn(\`\n    リモートストレージパスが設定されていません。\n    HTML内で下記の例のようにノード情報の配置場所を定義してください。\n    例:\n    var remoteStorageURL = "https://raw.githubusercontent.com/ArbaVojaganto/hogeRepository/main/"\n    \`);
-    }
-    const path = remoteStorageURL + pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
-    const response = await GetRequest(path);
-    if (isNull(response)) return [];
-    const json = await response.json();
-    console.log(json);
-    if (Node1.validation(json)) {
-        console.log(\`remoteGet: \${json}\`);
-        const nodeArray = [
-            json
-        ];
-        return nodeArray;
-    } else {
-        console.warn("Nodeとして解釈できないものを取得しました");
-        return [];
-    }
-};
-class ViewerApplication {
-    store = new StoredNodes();
-    scopeGraphHistory = new ScopeGraphManager();
-    updateFunctions = [];
-    constructor(document5, containerNode1){
-        this.document = document5;
-        this.containerNode = containerNode1;
-        this.store.setRemoteGetMethod(viewerRequestOfRemoteGet);
-        this.scopeGraphHistory = new ScopeGraphManager();
-        this.canvasManager = new CanvasManager(this.document, this.containerNode);
-    }
-    init = ()=>{
-        if (isNull(this.canvasManager) || isNull(this.canvasManager.graphCanvas)) return;
-        this.canvasManager.init();
-        const entryPoint = bufferToHash("entryPoint");
-        const n = entryPoint;
-        this.scopeGraphHistory.dependancyModuleInjection(this.canvasManager, this.store, this.activateNode);
-        this.scopeGraphHistory.restart(n);
-        this.update();
-        this.globalMenu = GlobalMenu2.init(this.document, this.containerNode, this.reload, this.scopeGraphHistory);
-        customElements.define('localmenu-div', LocalMenu, {
-            extends: 'div'
-        });
-        customElements.define('node-detail-div', NodeDetail, {
-            extends: 'div'
-        });
-    };
-    reload = async ()=>{
-        await this.scopeGraphHistory.currentScopeReload();
-        if (!isNull(this.localMenu)) {
-            this.localMenu.reloadDetail();
-        }
-    };
-    activateNode = (node)=>{
-        if (isNull(this.localMenu)) {
-            this.localMenu = new LocalMenu(this.store.tagHashDict, this.store.fetch, this.store.update, this.reload);
-            this.containerNode.appendChild(this.localMenu);
-        }
-        this.localMenu.setDetail(node);
-    };
-    setUpdateFunction = (fn)=>{
-        this.updateFunctions.push(fn);
-    };
-    update = ()=>{
-        this.canvasManager?.update();
-        this.scopeGraphHistory.update();
-        this.scopeGraphHistory.draw();
-        this.updateFunctions.forEach((e)=>{
-            e();
-        });
-        requestAnimationFrame(this.update);
-    };
-}
-class GlobalMenu2 {
-    constructor(document6, rootNode2, reload5, scopeManager1){
-        this.document = document6;
-        this.rootNode = rootNode2;
-        this.reload = reload5;
-        this.scopeManager = scopeManager1;
-        const toAllScope1 = document6.createElement("button");
-        toAllScope1.onclick = ()=>{
-            this.scopeManager?.restart(bufferToHash("node"));
-        };
-        toAllScope1.innerText = \`toAllScope\`;
-        rootNode2.appendChild(toAllScope1);
-        const toTagScope1 = document6.createElement('button');
-        toTagScope1.onclick = ()=>{
-            this.scopeManager?.restart(bufferToHash("tag"));
-        };
-        toTagScope1.innerText = \`toTagScope\`;
-        rootNode2.appendChild(toTagScope1);
-        const toBlobScope1 = document6.createElement('button');
-        toBlobScope1.onclick = ()=>{
-            this.scopeManager?.restart(bufferToHash("blob"));
-        };
-        toBlobScope1.innerText = \`toBlobScope\`;
-        rootNode2.appendChild(toBlobScope1);
-        const toTodayScope1 = document6.createElement('button');
-        toTodayScope1.onclick = ()=>{
-            const s = todayString();
-            if (s) {
-                this.scopeManager?.restart(bufferToHash(s));
-            }
-        };
-        toTodayScope1.innerText = \`toTodayScope\`;
-        rootNode2.appendChild(toTodayScope1);
-    }
-    static init = (document7, rootElement, reload6, scopeManager2)=>{
-        const globalMenu = document7.createElement("div");
-        if (isNull(globalMenu)) return undefined;
-        globalMenu.id = "network-graph-global-menu";
-        rootElement.appendChild(globalMenu);
-        const i2 = new GlobalMenu2(document7, globalMenu, reload6, scopeManager2);
+        const i2 = new GlobalMenu(document4, globalMenu, reload4, scopeManager1);
         return i2;
     };
 }
