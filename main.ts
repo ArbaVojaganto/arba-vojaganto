@@ -1456,259 +1456,6 @@ class BlobMeta extends Node1 {
         return true;
     };
 }
-class NodeDetail extends HTMLDivElement {
-    constructor(fetchNode2){
-        super();
-        this.fetchNode = fetchNode2;
-        this.classList.add("node-detail");
-        this.thumbnailElement = document.createElement('img');
-        this.thumbnailElement.classList.add("thumbnail");
-        this.thumbnailElement.hidden = true;
-        this.appendChild(this.thumbnailElement);
-        this.titleElement = document.createElement('p');
-        this.titleElement.innerText = "title";
-        this.appendChild(this.titleElement);
-        this.descriptionElement = document.createElement('p');
-        this.descriptionElement.innerText = "description";
-        this.appendChild(this.descriptionElement);
-        const modal = document.getElementById('modal');
-        const mask = document.getElementById('mask');
-        this.modalOpenElement = document.createElement("div");
-        if (modal != null && mask != null && !isNull(this.modalOpenElement)) {
-            this.modalOpenElement.id = "open";
-            this.modalOpenElement.innerText = "click to open content";
-            this.modalOpenElement.onclick = ()=>{
-                modal.classList.remove('hidden');
-                mask.classList.remove('hidden');
-            };
-            mask.onclick = ()=>{
-                modal.classList.add('hidden');
-                mask.classList.add('hidden');
-            };
-            this.appendChild(this.modalOpenElement);
-            this.modalWindowElement = modal;
-        }
-    }
-    reloadDetail = async ()=>{
-        if (this.currentNode) {
-            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
-            if (!isNull(remoteLatestNode)) {
-                this.setDetail(remoteLatestNode);
-            }
-        }
-    };
-    setDetail(node) {
-        if (isNull(this.titleElement) || isNull(this.thumbnailElement) || isNull(this.descriptionElement)) return;
-        this.titleElement.innerText = node.title.substring(0, 25);
-        this.descriptionElement.innerText = node.description;
-        const orgPathData = orgmodeResourcePath(node.hash);
-        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
-            const blobPathData = blobResourcePath(node.hash);
-            this.thumbnailElement.src = remoteStorageURL + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-            this.thumbnailElement.hidden = false;
-        } else {
-            if (node.thumbnail == "") {
-                this.thumbnailElement.hidden = true;
-            } else {
-                this.thumbnailElement.src = node.thumbnail;
-                this.thumbnailElement.hidden = false;
-            }
-        }
-        if (this.modalWindowElement) {
-            while(this.modalWindowElement.firstChild){
-                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
-            }
-            const iframe = document.createElement("iframe");
-            iframe.src = remoteStorageURL + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-            this.modalWindowElement.appendChild(iframe);
-        }
-        const props = objToRecurisveAccordionMenu(document, node);
-        if (isNull(this.properties)) {
-            this.appendChild(document.createTextNode("props: "));
-            this.properties = props;
-            this.appendChild(this.properties);
-        } else {
-            this.replaceChild(props, this.properties);
-            this.properties = props;
-        }
-        const tagsRoot = document.createElement('ul');
-        if (isNull(this.tags)) {
-            this.tags = tagsRoot;
-            this.appendChild(this.tags);
-        } else {
-            this.replaceChild(tagsRoot, this.tags);
-            this.tags = tagsRoot;
-        }
-        Object.entries(node.vector).forEach(async ([target, label])=>{
-            const node = await this.fetchNode(target);
-            if (node) {
-                const li = document.createElement('li');
-                li.innerText = node.title;
-                tagsRoot.appendChild(li);
-            }
-        });
-        this.currentNode = node;
-    }
-}
-class EditableNodeDetail extends NodeDetail {
-    remoteOpenOrgElement = document.createElement('div');
-    remoteOpenBlobElement = document.createElement('div');
-    remoteOpenMetaElement = document.createElement('div');
-    jsonTextAreaElement = document.createElement('textarea');
-    tagSelectorElement = document.createElement('input');
-    tagInserterButtonElement = document.createElement('button');
-    tagListElement = document.createElement('ul');
-    constructor(fetchNode1, tagHashDict, updateNode, reload1){
-        super(fetchNode1);
-        this.tagHashDict = tagHashDict;
-        this.updateNode = updateNode;
-        this.reload = reload1;
-        this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
-        this.appendChild(this.remoteOpenOrgElement);
-        this.remoteOpenBlobElement.innerText = "xdgOpenBlob";
-        this.appendChild(this.remoteOpenBlobElement);
-        this.remoteOpenMetaElement.innerText = "xdgOpenMeta";
-        this.appendChild(this.remoteOpenMetaElement);
-        this.appendChild(this.tagListElement);
-        const tagDict = tagHashDict();
-        const datalist = Object.values(tagDict).map((e)=>e.title
-        );
-        this.tagSelectorElement = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
-        this.appendChild(this.tagSelectorElement);
-        this.tagInserterButtonElement.textContent = 'tag insert';
-        this.tagInserterButtonElement.onclick = this.insertTag;
-        this.appendChild(this.tagInserterButtonElement);
-        this.jsonTextAreaElement.value = "json";
-        this.appendChild(this.jsonTextAreaElement);
-    }
-    insertTag = async ()=>{
-        const node = JSON.parse(this.jsonTextAreaElement.value);
-        const tag = this.tagHashDict()[this.tagSelectorElement.value];
-        if (Node1.validation(node)) {
-            const index = tag.hash;
-            node.vector[index] = node.vector[index] ?? {
-            };
-            node.vector[index]["tag"] = 1;
-            this.jsonTextAreaElement.value = JSON.stringify(node);
-            await this.updateNode(node, new FormData);
-            this.reload();
-        }
-    };
-    setDetail(node) {
-        super.setDetail(node);
-        const orgPathData = orgmodeResourcePath(node.hash);
-        this.jsonTextAreaElement.value = JSON.stringify(node);
-        if (this.remoteOpenOrgElement) {
-            removeAllChild(this.remoteOpenOrgElement);
-            const xdgOpenOrgPath = remoteStorageURL + "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-            const elems = PathElement("org", "/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention, xdgOpenOrgPath);
-            elems.forEach((e)=>{
-                if (this.remoteOpenOrgElement) {
-                    this.remoteOpenOrgElement.appendChild(e);
-                }
-            });
-        }
-        if (this.remoteOpenBlobElement) {
-            if (BlobMeta.validation(node)) {
-                removeAllChild(this.remoteOpenBlobElement);
-                const blobPathData = blobResourcePath(node.hash);
-                const xdgOpenBlobPath = remoteStorageURL + "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-                const elems = PathElement("blob", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
-                elems.forEach((e)=>{
-                    if (this.remoteOpenBlobElement) {
-                        this.remoteOpenBlobElement.appendChild(e);
-                    }
-                });
-                this.remoteOpenBlobElement.hidden = false;
-            } else {
-                this.remoteOpenBlobElement.hidden = true;
-            }
-        }
-        if (this.remoteOpenMetaElement) {
-            removeAllChild(this.remoteOpenMetaElement);
-            const metaPathData = metaResourcePath(node.hash);
-            const xdgOpenMetaPath = remoteStorageURL + "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
-            const elems = PathElement("json", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
-            elems.forEach((e)=>{
-                if (this.remoteOpenMetaElement) {
-                    this.remoteOpenMetaElement.appendChild(e);
-                }
-            });
-        }
-        this.reloadTagSelectorDataList();
-    }
-    reloadTagSelectorDataList = ()=>{
-        const tagDict1 = this.tagHashDict();
-        const datalist1 = Object.values(tagDict1).map((e)=>e.title
-        );
-        const dl = document.getElementById("li-tag-datalist");
-        if (!isNull(dl)) {
-            while(dl.firstChild){
-                dl.removeChild(dl.firstChild);
-            }
-            datalist1.forEach((e)=>{
-                let option = document.createElement('option');
-                option.value = e;
-                dl.appendChild(option);
-            });
-        }
-    };
-}
-const objToRecurisveAccordionMenu = (document2, obj)=>{
-    const root = document2.createElement('ul');
-    root.classList.add('accordion-child');
-    Object.entries(obj).forEach(([key1, value])=>{
-        const li = document2.createElement('li');
-        const label = document2.createElement('label');
-        label.innerText = \`\${key1.substring(0, 10)}: \`;
-        li.appendChild(label);
-        if (typeof value == 'object') {
-            const accordion = document2.createElement('input');
-            accordion.type = 'checkbox';
-            accordion.classList.add('toggle');
-            li.appendChild(accordion);
-            const ul = objToRecurisveAccordionMenu(document2, value);
-            li.appendChild(ul);
-        } else if (typeof value == 'string' || typeof value == 'number') {
-            const child = document2.createElement('input');
-            child.value = value.toString();
-            li.appendChild(child);
-        }
-        root.appendChild(li);
-    });
-    return root;
-};
-const removeAllChild = (target)=>{
-    while(target.firstChild){
-        target.removeChild(target.firstChild);
-    }
-};
-const textToClipBoard = (document2, text)=>{
-    const tempElement = document2.createElement("textarea");
-    tempElement.textContent = text;
-    document2.body.appendChild(tempElement);
-    document2.getSelection()?.selectAllChildren(tempElement);
-    tempElement.select();
-    var success = document2.execCommand('copy');
-    document2.body.removeChild(tempElement);
-    return success;
-};
-const PathElement = (name, copyString, onClickRequestPath)=>{
-    const elems = [];
-    const copy = document.createElement("button");
-    copy.onclick = ()=>{
-        textToClipBoard(document, copyString);
-    };
-    copy.innerText = \`\${name}: pathToClipboard\`;
-    elems.push(copy);
-    const request = document.createElement("button");
-    request.onclick = ()=>{
-        GetRequest(onClickRequestPath);
-    };
-    request.innerText = \`\${name}: remoteXdgOpen\`;
-    elems.push(request);
-    return elems;
-};
 class PriorityQueue {
     items = {
     };
@@ -3310,6 +3057,1350 @@ class DenoStdInternalError extends Error {
         this.name = "DenoStdInternalError";
     }
 }
+var Q = Object.create, E = Object.defineProperty, X = Object.getPrototypeOf, G = Object.prototype.hasOwnProperty, J = Object.getOwnPropertyNames, K1 = Object.getOwnPropertyDescriptor;
+var W = (e)=>E(e, "__esModule", {
+        value: !0
+    })
+;
+var g = (e, t)=>()=>(t || e((t = {
+            exports: {
+            }
+        }).exports, t), t.exports)
+;
+var Y = (e, t, r1)=>{
+    if (t && typeof t == "object" || typeof t == "function") for (let n of J(t))!G.call(e, n) && n !== "default" && E(e, n, {
+        get: ()=>t[n]
+        ,
+        enumerable: !(r1 = K1(t, n)) || r1.enumerable
+    });
+    return e;
+}, B = (e)=>Y(W(E(e != null ? Q(X(e)) : {
+    }, "default", e && e.__esModule && "default" in e ? {
+        get: ()=>e.default
+        ,
+        enumerable: !0
+    } : {
+        value: e,
+        enumerable: !0
+    })), e)
+;
+var w = g((L)=>{
+    function T(e) {
+        this.sequences = e.split(/\r?\n/), this.totalLines = this.sequences.length, this.lineNumber = 0;
+    }
+    T.prototype.peekNextLine = function() {
+        return this.hasNext() ? this.sequences[this.lineNumber] : null;
+    };
+    T.prototype.getNextLine = function() {
+        return this.hasNext() ? this.sequences[this.lineNumber++] : null;
+    };
+    T.prototype.hasNext = function() {
+        return this.lineNumber < this.totalLines;
+    };
+    typeof L != "undefined" && (L.Stream = T);
+});
+var S = g((R)=>{
+    var u = {
+        rules: {
+        },
+        define: function(e, t) {
+            this.rules[e] = t;
+            var r1 = "is" + e.substring(0, 1).toUpperCase() + e.substring(1);
+            this[r1] = function(n) {
+                return this.rules[e].exec(n);
+            };
+        }
+    };
+    u.define("header", /^(\*+)\s+(.*)\$/);
+    u.define("preformatted", /^(\s*):(?: (.*)\$|\$)/);
+    u.define("unorderedListElement", /^(\s*)(?:-|\+|\s+\*)\s+(.*)\$/);
+    u.define("orderedListElement", /^(\s*)(\d+)(?:\.|\))\s+(.*)\$/);
+    u.define("tableSeparator", /^(\s*)\|((?:\+|-)*?)\|?\$/);
+    u.define("tableRow", /^(\s*)\|(.*?)\|?\$/);
+    u.define("blank", /^\$/);
+    u.define("horizontalRule", /^(\s*)-{5,}\$/);
+    u.define("directive", /^(\s*)#\+(?:(begin|end)_)?(.*)\$/i);
+    u.define("comment", /^(\s*)#(.*)\$/);
+    u.define("line", /^(\s*)(.*)\$/);
+    function D() {
+    }
+    D.prototype = {
+        isListElement: function() {
+            return this.type === f.tokens.orderedListElement || this.type === f.tokens.unorderedListElement;
+        },
+        isTableElement: function() {
+            return this.type === f.tokens.tableSeparator || this.type === f.tokens.tableRow;
+        }
+    };
+    function f(e) {
+        this.stream = e, this.tokenStack = [];
+    }
+    f.prototype = {
+        tokenize: function(e) {
+            var t = new D;
+            if (t.fromLineNumber = this.stream.lineNumber, u.isHeader(e)) t.type = f.tokens.header, t.indentation = 0, t.content = RegExp.\$2, t.level = RegExp.\$1.length;
+            else if (u.isPreformatted(e)) t.type = f.tokens.preformatted, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else if (u.isUnorderedListElement(e)) t.type = f.tokens.unorderedListElement, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else if (u.isOrderedListElement(e)) t.type = f.tokens.orderedListElement, t.indentation = RegExp.\$1.length, t.content = RegExp.\$3, t.number = RegExp.\$2;
+            else if (u.isTableSeparator(e)) t.type = f.tokens.tableSeparator, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else if (u.isTableRow(e)) t.type = f.tokens.tableRow, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else if (u.isBlank(e)) t.type = f.tokens.blank, t.indentation = 0, t.content = null;
+            else if (u.isHorizontalRule(e)) t.type = f.tokens.horizontalRule, t.indentation = RegExp.\$1.length, t.content = null;
+            else if (u.isDirective(e)) {
+                t.type = f.tokens.directive, t.indentation = RegExp.\$1.length, t.content = RegExp.\$3;
+                var r1 = RegExp.\$2;
+                /^begin/i.test(r1) ? t.beginDirective = !0 : /^end/i.test(r1) ? t.endDirective = !0 : t.oneshotDirective = !0;
+            } else if (u.isComment(e)) t.type = f.tokens.comment, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else if (u.isLine(e)) t.type = f.tokens.line, t.indentation = RegExp.\$1.length, t.content = RegExp.\$2;
+            else throw new Error("SyntaxError: Unknown line: " + e);
+            return t;
+        },
+        pushToken: function(e) {
+            this.tokenStack.push(e);
+        },
+        pushDummyTokenByType: function(e) {
+            var t = new D;
+            t.type = e, this.tokenStack.push(t);
+        },
+        peekStackedToken: function() {
+            return this.tokenStack.length > 0 ? this.tokenStack[this.tokenStack.length - 1] : null;
+        },
+        getStackedToken: function() {
+            return this.tokenStack.length > 0 ? this.tokenStack.pop() : null;
+        },
+        peekNextToken: function() {
+            return this.peekStackedToken() || this.tokenize(this.stream.peekNextLine());
+        },
+        getNextToken: function() {
+            return this.getStackedToken() || this.tokenize(this.stream.getNextLine());
+        },
+        hasNext: function() {
+            return this.stream.hasNext();
+        },
+        getLineNumber: function() {
+            return this.stream.lineNumber;
+        }
+    };
+    f.tokens = {
+    };
+    [
+        "header",
+        "orderedListElement",
+        "unorderedListElement",
+        "tableRow",
+        "tableSeparator",
+        "preformatted",
+        "line",
+        "horizontalRule",
+        "blank",
+        "directive",
+        "comment"
+    ].forEach(function(e, t) {
+        f.tokens[e] = t;
+    });
+    typeof R != "undefined" && (R.Lexer = f);
+});
+var b = g((C)=>{
+    function j(e, t) {
+        if (this.type = e, this.children = [], t) for(var r2 = 0, n = t.length; r2 < n; ++r2)this.appendChild(t[r2]);
+    }
+    j.prototype = {
+        previousSibling: null,
+        parent: null,
+        get firstChild () {
+            return this.children.length < 1 ? null : this.children[0];
+        },
+        get lastChild () {
+            return this.children.length < 1 ? null : this.children[this.children.length - 1];
+        },
+        appendChild: function(e) {
+            var t = this.children.length < 1 ? null : this.lastChild;
+            this.children.push(e), e.previousSibling = t, e.parent = this;
+        },
+        toString: function() {
+            var e = "<" + this.type + ">";
+            return typeof this.value != "undefined" ? e += " " + this.value : this.children && (e += \`\n\` + this.children.map(function(t, r2) {
+                return "#" + r2 + " " + t.toString();
+            }).join(\`\n\`).split(\`\n\`).map(function(t) {
+                return "  " + t;
+            }).join(\`\n\`)), e;
+        }
+    };
+    var p = {
+        types: {
+        },
+        define: function(e, t) {
+            this.types[e] = e;
+            var r2 = "create" + e.substring(0, 1).toUpperCase() + e.substring(1), n = typeof t == "function";
+            this[r2] = function(i2, s) {
+                var a = new j(e, i2);
+                return n && t(a, s || {
+                }), a;
+            };
+        }
+    };
+    p.define("text", function(e, t) {
+        e.value = t.value;
+    });
+    p.define("header", function(e, t) {
+        e.level = t.level;
+    });
+    p.define("orderedList");
+    p.define("unorderedList");
+    p.define("definitionList");
+    p.define("listElement");
+    p.define("paragraph");
+    p.define("preformatted");
+    p.define("table");
+    p.define("tableRow");
+    p.define("tableCell");
+    p.define("horizontalRule");
+    p.define("directive");
+    p.define("inlineContainer");
+    p.define("bold");
+    p.define("italic");
+    p.define("underline");
+    p.define("code");
+    p.define("verbatim");
+    p.define("dashed");
+    p.define("link", function(e, t) {
+        e.src = t.src;
+    });
+    typeof C != "undefined" && (C.Node = p);
+});
+var P = g((N)=>{
+    var Z = w().Stream, o = S().Lexer, c = b().Node;
+    function x1() {
+        this.inlineParser = new O;
+    }
+    x1.parseStream = function(e, t) {
+        var r2 = new x1;
+        return r2.initStatus(e, t), r2.parseNodes(), r2.nodes;
+    };
+    x1.prototype = {
+        initStatus: function(e, t) {
+            if (typeof e == "string" && (e = new Z(e)), this.lexer = new o(e), this.nodes = [], this.options = {
+                toc: !0,
+                num: !0,
+                "^": "{}",
+                multilineCell: !1
+            }, t && typeof t == "object") for(var r2 in t)this.options[r2] = t[r2];
+            this.document = {
+                options: this.options,
+                directiveValues: {
+                },
+                convert: function(n, i2) {
+                    var s = new n(this, i2);
+                    return s.result;
+                }
+            };
+        },
+        parse: function(e, t) {
+            return this.initStatus(e, t), this.parseDocument(), this.document.nodes = this.nodes, this.document;
+        },
+        createErrorReport: function(e) {
+            return new Error(e + " at line " + this.lexer.getLineNumber());
+        },
+        skipBlank: function() {
+            for(var e = null; this.lexer.peekNextToken().type === o.tokens.blank;)e = this.lexer.getNextToken();
+            return e;
+        },
+        setNodeOriginFromToken: function(e, t) {
+            return e.fromLineNumber = t.fromLineNumber, e;
+        },
+        appendNode: function(e) {
+            var t = this.nodes.length > 0 ? this.nodes[this.nodes.length - 1] : null;
+            this.nodes.push(e), e.previousSibling = t;
+        },
+        parseDocument: function() {
+            this.parseTitle(), this.parseNodes();
+        },
+        parseNodes: function() {
+            for(; this.lexer.hasNext();){
+                var e = this.parseElement();
+                e && this.appendNode(e);
+            }
+        },
+        parseTitle: function() {
+            this.skipBlank(), this.lexer.hasNext() && this.lexer.peekNextToken().type === o.tokens.line ? this.document.title = this.createTextNode(this.lexer.getNextToken().content) : this.document.title = null, this.lexer.pushDummyTokenByType(o.tokens.blank);
+        },
+        parseElement: function() {
+            var e = null;
+            switch(this.lexer.peekNextToken().type){
+                case o.tokens.header:
+                    e = this.parseHeader();
+                    break;
+                case o.tokens.preformatted:
+                    e = this.parsePreformatted();
+                    break;
+                case o.tokens.orderedListElement:
+                case o.tokens.unorderedListElement:
+                    e = this.parseList();
+                    break;
+                case o.tokens.line:
+                    e = this.parseText();
+                    break;
+                case o.tokens.tableRow:
+                case o.tokens.tableSeparator:
+                    e = this.parseTable();
+                    break;
+                case o.tokens.blank:
+                    this.skipBlank(), this.lexer.hasNext() && (this.lexer.peekNextToken().type === o.tokens.line ? e = this.parseParagraph() : e = this.parseElement());
+                    break;
+                case o.tokens.horizontalRule:
+                    this.lexer.getNextToken(), e = c.createHorizontalRule();
+                    break;
+                case o.tokens.directive:
+                    e = this.parseDirective();
+                    break;
+                case o.tokens.comment:
+                    this.lexer.getNextToken();
+                    break;
+                default:
+                    throw this.createErrorReport("Unhandled token: " + this.lexer.peekNextToken().type);
+            }
+            return e;
+        },
+        parseElementBesidesDirectiveEnd: function() {
+            try {
+                return this.parseElement = this.parseElementBesidesDirectiveEndBody, this.parseElement();
+            } finally{
+                this.parseElement = this.originalParseElement;
+            }
+        },
+        parseElementBesidesDirectiveEndBody: function() {
+            return this.lexer.peekNextToken().type === o.tokens.directive && this.lexer.peekNextToken().endDirective ? null : this.originalParseElement();
+        },
+        parseHeader: function() {
+            var e = this.lexer.getNextToken(), t = c.createHeader([
+                this.createTextNode(e.content)
+            ], {
+                level: e.level
+            });
+            return this.setNodeOriginFromToken(t, e), t;
+        },
+        parsePreformatted: function() {
+            var e = this.lexer.peekNextToken(), t = c.createPreformatted([]);
+            this.setNodeOriginFromToken(t, e);
+            for(var r2 = []; this.lexer.hasNext();){
+                var n = this.lexer.peekNextToken();
+                if (n.type !== o.tokens.preformatted || n.indentation < e.indentation) break;
+                this.lexer.getNextToken(), r2.push(n.content);
+            }
+            return t.appendChild(this.createTextNode(r2.join(\`\n\`), !0)), t;
+        },
+        definitionPattern: /^(.*?) :: *(.*)\$/,
+        parseList: function() {
+            var e = this.lexer.peekNextToken(), t, r2 = !1;
+            for(this.definitionPattern.test(e.content) ? (t = c.createDefinitionList([]), r2 = !0) : t = e.type === o.tokens.unorderedListElement ? c.createUnorderedList([]) : c.createOrderedList([]), this.setNodeOriginFromToken(t, e); this.lexer.hasNext();){
+                var n = this.lexer.peekNextToken();
+                if (!n.isListElement() || n.indentation !== e.indentation) break;
+                t.appendChild(this.parseListElement(e.indentation, r2));
+            }
+            return t;
+        },
+        unknownDefinitionTerm: "???",
+        parseListElement: function(e, t) {
+            var r2 = this.lexer.getNextToken(), n = c.createListElement([]);
+            if (this.setNodeOriginFromToken(n, r2), n.isDefinitionList = t, t) {
+                var i2 = this.definitionPattern.exec(r2.content);
+                n.term = [
+                    this.createTextNode(i2 && i2[1] ? i2[1] : this.unknownDefinitionTerm)
+                ], n.appendChild(this.createTextNode(i2 ? i2[2] : r2.content));
+            } else n.appendChild(this.createTextNode(r2.content));
+            for(; this.lexer.hasNext();){
+                var s = this.skipBlank();
+                if (!this.lexer.hasNext()) break;
+                var a = this.lexer.peekNextToken();
+                if (s && !a.isListElement() && this.lexer.pushToken(s), a.indentation <= e) break;
+                var h = this.parseElement();
+                h && n.appendChild(h);
+            }
+            return n;
+        },
+        parseTable: function() {
+            var e = this.lexer.peekNextToken(), t = c.createTable([]);
+            this.setNodeOriginFromToken(t, e);
+            for(var r2 = !1, n = e.type === o.tokens.tableSeparator && this.options.multilineCell; this.lexer.hasNext() && (e = this.lexer.peekNextToken()).isTableElement();)if (e.type === o.tokens.tableRow) {
+                var i3 = this.parseTableRow(n);
+                t.appendChild(i3);
+            } else r2 = !0, this.lexer.getNextToken();
+            return r2 && t.children.length && t.children[0].children.forEach(function(s) {
+                s.isHeader = !0;
+            }), t;
+        },
+        parseTableRow: function(e) {
+            for(var t = []; this.lexer.peekNextToken().type === o.tokens.tableRow && (t.push(this.lexer.getNextToken()), !!e););
+            if (!t.length) throw this.createErrorReport("Expected table row");
+            var r2 = t.shift(), n = r2.content.split("|");
+            t.forEach(function(s) {
+                s.content.split("|").forEach(function(a, h) {
+                    n[h] = (n[h] || "") + \`\n\` + a;
+                });
+            });
+            var i4 = n.map(function(s) {
+                return c.createTableCell(x1.parseStream(s));
+            }, this);
+            return this.setNodeOriginFromToken(c.createTableRow(i4), r2);
+        },
+        parseDirective: function() {
+            var e = this.lexer.getNextToken(), t = this.createDirectiveNodeFromToken(e);
+            if (e.endDirective) throw this.createErrorReport("Unmatched 'end' directive for " + t.directiveName);
+            if (e.oneshotDirective) return this.interpretDirective(t), t;
+            if (!e.beginDirective) throw this.createErrorReport("Invalid directive " + t.directiveName);
+            return t.children = [], this.isVerbatimDirective(t) ? this.parseDirectiveBlockVerbatim(t) : this.parseDirectiveBlock(t);
+        },
+        createDirectiveNodeFromToken: function(e) {
+            var t = /^[ ]*([^ ]*)[ ]*(.*)[ ]*\$/.exec(e.content), r2 = c.createDirective(null);
+            return this.setNodeOriginFromToken(r2, e), r2.directiveName = t[1].toLowerCase(), r2.directiveArguments = this.parseDirectiveArguments(t[2]), r2.directiveOptions = this.parseDirectiveOptions(t[2]), r2.directiveRawValue = t[2], r2;
+        },
+        isVerbatimDirective: function(e) {
+            var t = e.directiveName;
+            return t === "src" || t === "example" || t === "html";
+        },
+        parseDirectiveBlock: function(e, t) {
+            for(this.lexer.pushDummyTokenByType(o.tokens.blank); this.lexer.hasNext();){
+                var r2 = this.lexer.peekNextToken();
+                if (r2.type === o.tokens.directive && r2.endDirective && this.createDirectiveNodeFromToken(r2).directiveName === e.directiveName) return this.lexer.getNextToken(), e;
+                var n = this.parseElementBesidesDirectiveEnd();
+                n && e.appendChild(n);
+            }
+            throw this.createErrorReport("Unclosed directive " + e.directiveName);
+        },
+        parseDirectiveBlockVerbatim: function(e) {
+            for(var t = []; this.lexer.hasNext();){
+                var r3 = this.lexer.peekNextToken();
+                if (r3.type === o.tokens.directive && r3.endDirective && this.createDirectiveNodeFromToken(r3).directiveName === e.directiveName) return this.lexer.getNextToken(), e.appendChild(this.createTextNode(t.join(\`\n\`), !0)), e;
+                t.push(this.lexer.stream.getNextLine());
+            }
+            throw this.createErrorReport("Unclosed directive " + e.directiveName);
+        },
+        parseDirectiveArguments: function(e) {
+            return e.split(/[ ]+/).filter(function(t) {
+                return t.length && t[0] !== "-";
+            });
+        },
+        parseDirectiveOptions: function(e) {
+            return e.split(/[ ]+/).filter(function(t) {
+                return t.length && t[0] === "-";
+            });
+        },
+        interpretDirective: function(e) {
+            switch(e.directiveName){
+                case "options:":
+                    this.interpretOptionDirective(e);
+                    break;
+                case "title:":
+                    this.document.title = e.directiveRawValue;
+                    break;
+                case "author:":
+                    this.document.author = e.directiveRawValue;
+                    break;
+                case "email:":
+                    this.document.email = e.directiveRawValue;
+                    break;
+                default:
+                    this.document.directiveValues[e.directiveName] = e.directiveRawValue;
+                    break;
+            }
+        },
+        interpretOptionDirective: function(e) {
+            e.directiveArguments.forEach(function(t) {
+                var r4 = t.split(":");
+                this.options[r4[0]] = this.convertLispyValue(r4[1]);
+            }, this);
+        },
+        convertLispyValue: function(e) {
+            switch(e){
+                case "t":
+                    return !0;
+                case "nil":
+                    return !1;
+                default:
+                    return /^[0-9]+\$/.test(e) ? parseInt(e) : e;
+            }
+        },
+        parseParagraph: function() {
+            var e = this.lexer.peekNextToken(), t = c.createParagraph([]);
+            this.setNodeOriginFromToken(t, e);
+            for(var r4 = []; this.lexer.hasNext();){
+                var n = this.lexer.peekNextToken();
+                if (n.type !== o.tokens.line || n.indentation < e.indentation) break;
+                this.lexer.getNextToken(), r4.push(n.content);
+            }
+            return t.appendChild(this.createTextNode(r4.join(\`\n\`))), t;
+        },
+        parseText: function(e) {
+            var t = this.lexer.getNextToken();
+            return this.createTextNode(t.content, e);
+        },
+        createTextNode: function(e, t) {
+            return t ? c.createText(null, {
+                value: e
+            }) : this.inlineParser.parseEmphasis(e);
+        }
+    };
+    x1.prototype.originalParseElement = x1.prototype.parseElement;
+    function O() {
+        this.preEmphasis = \` 	\\('"\`, this.postEmphasis = \`- 	.,:!?;'"\\)\`, this.borderForbidden = \` 	\r\n,"'\`, this.bodyRegexp = "[\\s\\S]*?", this.markers = "*/_=~+", this.emphasisPattern = this.buildEmphasisPattern(), this.linkPattern = /\[\[([^\]]*)\](?:\[([^\]]*)\])?\]/g;
+    }
+    O.prototype = {
+        parseEmphasis: function(e) {
+            var t = this.emphasisPattern;
+            t.lastIndex = 0;
+            for(var r4 = [], n, i4 = 0, s; n = t.exec(e);){
+                var a = n[0], h = n[1], d = n[2], v = n[3], m = n[4];
+                {
+                    var k = t.lastIndex - a.length, y1 = e.substring(i4, k + h.length);
+                    s = t.lastIndex, r4.push(this.parseLink(y1)), t.lastIndex = s;
+                }
+                var A = [
+                    c.createText(null, {
+                        value: v
+                    })
+                ], V = this.emphasizeElementByMarker(A, d);
+                r4.push(V), i4 = t.lastIndex - m.length;
+            }
+            return (t.lastIndex === 0 || t.lastIndex !== e.length - 1) && r4.push(this.parseLink(e.substring(i4))), r4.length === 1 ? r4[0] : c.createInlineContainer(r4);
+        },
+        depth: 0,
+        parseLink: function(e) {
+            var t = this.linkPattern;
+            t.lastIndex = 0;
+            for(var r4, n = [], i4 = 0, s; r4 = t.exec(e);){
+                var a = r4[0], h = r4[1], d = r4[2], v = t.lastIndex - a.length, m = e.substring(i4, v);
+                n.push(c.createText(null, {
+                    value: m
+                }));
+                var k = c.createLink([]);
+                k.src = h, d ? (s = t.lastIndex, k.appendChild(this.parseEmphasis(d)), t.lastIndex = s) : k.appendChild(c.createText(null, {
+                    value: h
+                })), n.push(k), i4 = t.lastIndex;
+            }
+            return (t.lastIndex === 0 || t.lastIndex !== e.length - 1) && n.push(c.createText(null, {
+                value: e.substring(i4)
+            })), c.createInlineContainer(n);
+        },
+        emphasizeElementByMarker: function(e, t) {
+            switch(t){
+                case "*":
+                    return c.createBold(e);
+                case "/":
+                    return c.createItalic(e);
+                case "_":
+                    return c.createUnderline(e);
+                case "=":
+                case "~":
+                    return c.createCode(e);
+                case "+":
+                    return c.createDashed(e);
+            }
+        },
+        buildEmphasisPattern: function() {
+            return new RegExp("([" + this.preEmphasis + \`]|^|\r?\n)([\` + this.markers + "])([^" + this.borderForbidden + "]|[^" + this.borderForbidden + "]" + this.bodyRegexp + "[^" + this.borderForbidden + "])\\2([" + this.postEmphasis + \`]|\$|\r?\n)\`, "g");
+        }
+    };
+    typeof N != "undefined" && (N.Parser = x1, N.InlineParser = O);
+});
+var U = g((I)=>{
+    var l = b().Node;
+    function M() {
+    }
+    M.prototype = {
+        exportOptions: {
+            headerOffset: 1,
+            exportFromLineNumber: !1,
+            suppressSubScriptHandling: !1,
+            suppressAutoLink: !1,
+            translateSymbolArrow: !1,
+            suppressCheckboxHandling: !1,
+            customDirectiveHandler: null,
+            htmlClassPrefix: null,
+            htmlIdPrefix: null
+        },
+        untitled: "Untitled",
+        result: null,
+        initialize: function(e, t) {
+            this.orgDocument = e, this.documentOptions = e.options || {
+            }, this.exportOptions = t || {
+            }, this.headers = [], this.headerOffset = typeof this.exportOptions.headerOffset == "number" ? this.exportOptions.headerOffset : 1, this.sectionNumbers = [
+                0
+            ];
+        },
+        createTocItem: function(e, t) {
+            var r4 = [];
+            r4.parent = t;
+            var n = {
+                headerNode: e,
+                childTocs: r4
+            };
+            return n;
+        },
+        computeToc: function(e) {
+            typeof e != "number" && (e = Infinity);
+            var t = [];
+            t.parent = null;
+            for(var r4 = 1, n = t, i4 = 0; i4 < this.headers.length; ++i4){
+                var s = this.headers[i4];
+                if (!(s.level > e)) {
+                    var a = s.level - r4;
+                    if (a > 0) for(var h = 0; h < a; ++h){
+                        if (n.length === 0) {
+                            var d = l.createHeader([], {
+                                level: r4 + h
+                            });
+                            d.sectionNumberText = "", n.push(this.createTocItem(d, n));
+                        }
+                        n = n[n.length - 1].childTocs;
+                    }
+                    else if (a < 0) {
+                        a = -a;
+                        for(var v = 0; v < a; ++v)n = n.parent;
+                    }
+                    n.push(this.createTocItem(s, n)), r4 = s.level;
+                }
+            }
+            return t;
+        },
+        convertNode: function(e, t, r4) {
+            r4 || (e.type === l.types.directive ? (e.directiveName === "example" || e.directiveName === "src") && (r4 = !0) : e.type === l.types.preformatted && (r4 = !0)), typeof e == "string" && (e = l.createText(null, {
+                value: e
+            }));
+            var n = e.children ? this.convertNodesInternal(e.children, t, r4) : "", i4, s = this.computeAuxDataForNode(e);
+            switch(e.type){
+                case l.types.header:
+                    var a = null;
+                    n.indexOf("TODO ") === 0 ? a = "todo" : n.indexOf("DONE ") === 0 && (a = "done");
+                    var h = null;
+                    if (t) {
+                        var d = e.level, v = this.sectionNumbers.length;
+                        if (d > v) for(var m = d - v, k = 0; k < m; ++k)this.sectionNumbers[d - 1 - k] = 0;
+                        else d < v && (this.sectionNumbers.length = d);
+                        this.sectionNumbers[d - 1]++, h = this.sectionNumbers.join("."), e.sectionNumberText = h;
+                    }
+                    i4 = this.convertHeader(e, n, s, a, h), t && this.headers.push(e);
+                    break;
+                case l.types.orderedList:
+                    i4 = this.convertOrderedList(e, n, s);
+                    break;
+                case l.types.unorderedList:
+                    i4 = this.convertUnorderedList(e, n, s);
+                    break;
+                case l.types.definitionList:
+                    i4 = this.convertDefinitionList(e, n, s);
+                    break;
+                case l.types.listElement:
+                    if (e.isDefinitionList) {
+                        var y2 = this.convertNodesInternal(e.term, t, r4);
+                        i4 = this.convertDefinitionItem(e, n, s, y2, n);
+                    } else i4 = this.convertListItem(e, n, s);
+                    break;
+                case l.types.paragraph:
+                    i4 = this.convertParagraph(e, n, s);
+                    break;
+                case l.types.preformatted:
+                    i4 = this.convertPreformatted(e, n, s);
+                    break;
+                case l.types.table:
+                    i4 = this.convertTable(e, n, s);
+                    break;
+                case l.types.tableRow:
+                    i4 = this.convertTableRow(e, n, s);
+                    break;
+                case l.types.tableCell:
+                    e.isHeader ? i4 = this.convertTableHeader(e, n, s) : i4 = this.convertTableCell(e, n, s);
+                    break;
+                case l.types.horizontalRule:
+                    i4 = this.convertHorizontalRule(e, n, s);
+                    break;
+                case l.types.inlineContainer:
+                    i4 = this.convertInlineContainer(e, n, s);
+                    break;
+                case l.types.bold:
+                    i4 = this.convertBold(e, n, s);
+                    break;
+                case l.types.italic:
+                    i4 = this.convertItalic(e, n, s);
+                    break;
+                case l.types.underline:
+                    i4 = this.convertUnderline(e, n, s);
+                    break;
+                case l.types.code:
+                    i4 = this.convertCode(e, n, s);
+                    break;
+                case l.types.dashed:
+                    i4 = this.convertDashed(e, n, s);
+                    break;
+                case l.types.link:
+                    i4 = this.convertLink(e, n, s);
+                    break;
+                case l.types.directive:
+                    switch(e.directiveName){
+                        case "quote":
+                            i4 = this.convertQuote(e, n, s);
+                            break;
+                        case "example":
+                            i4 = this.convertExample(e, n, s);
+                            break;
+                        case "src":
+                            i4 = this.convertSrc(e, n, s);
+                            break;
+                        case "html":
+                        case "html:":
+                            i4 = this.convertHTML(e, n, s);
+                            break;
+                        default:
+                            this.exportOptions.customDirectiveHandler && this.exportOptions.customDirectiveHandler[e.directiveName] ? i4 = this.exportOptions.customDirectiveHandler[e.directiveName](e, n, s) : i4 = n;
+                    }
+                    break;
+                case l.types.text:
+                    i4 = this.convertText(e.value, r4);
+                    break;
+                default:
+                    throw Error("Unknown node type: " + e.type);
+            }
+            return typeof this.postProcess == "function" && (i4 = this.postProcess(e, i4, r4)), i4;
+        },
+        convertText: function(e, t) {
+            var r4 = this.escapeSpecialChars(e, t);
+            return !this.exportOptions.suppressSubScriptHandling && !t && (r4 = this.makeSubscripts(r4, t)), this.exportOptions.suppressAutoLink || (r4 = this.linkURL(r4)), r4;
+        },
+        convertHTML: function(e, t, r4) {
+            return t;
+        },
+        convertNodesInternal: function(e, t, r4) {
+            for(var n = [], i4 = 0; i4 < e.length; ++i4){
+                var s = e[i4], a = this.convertNode(s, t, r4);
+                n.push(a);
+            }
+            return this.combineNodesTexts(n);
+        },
+        convertHeaderBlock: function(e, t) {
+            throw Error("convertHeaderBlock is not implemented");
+        },
+        convertHeaderTree: function(e, t) {
+            return this.convertHeaderBlock(e, t);
+        },
+        convertNodesToHeaderTree: function(e, t, r4) {
+            var n = [], i4 = [];
+            typeof t == "undefined" && (t = 0), typeof r4 == "undefined" && (r4 = null);
+            for(var s = t; s < e.length;){
+                var a = e[s], h = a.type === l.types.header;
+                if (!h) {
+                    i4.push(a), s = s + 1;
+                    continue;
+                }
+                if (r4 && a.level <= r4.level) break;
+                var d = this.convertNodesToHeaderTree(e, s + 1, a);
+                n.push(d), s = d.nextIndex;
+            }
+            return {
+                header: r4,
+                childNodes: i4,
+                nextIndex: s,
+                childBlocks: n
+            };
+        },
+        convertNodes: function(e, t, r4) {
+            return this.convertNodesInternal(e, t, r4);
+        },
+        combineNodesTexts: function(e) {
+            return e.join("");
+        },
+        getNodeTextContent: function(e) {
+            return e.type === l.types.text ? this.escapeSpecialChars(e.value) : e.children ? e.children.map(this.getNodeTextContent, this).join("") : "";
+        },
+        escapeSpecialChars: function(e) {
+            throw Error("Implement escapeSpecialChars");
+        },
+        urlPattern: /\b(?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s\`!()\[\]{};:'".,<>?«»“”‘’])/ig,
+        linkURL: function(e) {
+            var t = this;
+            return e.replace(this.urlPattern, function(r4) {
+                return (r4.indexOf("://") < 0 && (r4 = "http://" + r4), t.makeLink(r4));
+            });
+        },
+        makeLink: function(e) {
+            throw Error("Implement makeLink");
+        },
+        makeSubscripts: function(e) {
+            return this.documentOptions["^"] === "{}" ? e.replace(/\b([^_ \t]*)_{([^}]*)}/g, this.makeSubscript) : this.documentOptions["^"] ? e.replace(/\b([^_ \t]*)_([^_]*)\b/g, this.makeSubscript) : e;
+        },
+        makeSubscript: function(e, t, r4) {
+            throw Error("Implement makeSubscript");
+        },
+        stripParametersFromURL: function(e) {
+            return e.replace(/\?.*\$/, "");
+        },
+        imageExtensionPattern: new RegExp("(" + [
+            "bmp",
+            "png",
+            "jpeg",
+            "jpg",
+            "gif",
+            "tiff",
+            "tif",
+            "xbm",
+            "xpm",
+            "pbm",
+            "pgm",
+            "ppm",
+            "svg"
+        ].join("|") + ")\$", "i")
+    };
+    typeof I != "undefined" && (I.Converter = M);
+});
+var _ = g((\$)=>{
+    var ee = U().Converter, z = b().Node;
+    function q(e, t) {
+        this.initialize(e, t), this.result = this.convert();
+    }
+    q.prototype = {
+        __proto__: ee.prototype,
+        convert: function() {
+            var e = this.orgDocument.title ? this.convertNode(this.orgDocument.title) : this.untitled, t = this.tag("h" + Math.max(Number(this.headerOffset), 1), e), r4 = this.convertNodes(this.orgDocument.nodes, !0), n = this.computeToc(this.documentOptions.toc), i4 = this.tocToHTML(n);
+            return {
+                title: e,
+                titleHTML: t,
+                contentHTML: r4,
+                tocHTML: i4,
+                toc: n,
+                toString: function() {
+                    return t + i4 + \`\n\` + r4;
+                }
+            };
+        },
+        tocToHTML: function(e) {
+            function t(r4) {
+                for(var n = "", i4 = 0; i4 < r4.length; ++i4){
+                    var s = r4[i4], a = s.headerNode.sectionNumberText, h = this.documentOptions.num ? this.inlineTag("span", a, {
+                        class: "section-number"
+                    }) : "", d = this.getNodeTextContent(s.headerNode), v = this.inlineTag("a", h + d, {
+                        href: "#header-" + a.replace(/\./g, "-")
+                    }), m = s.childTocs.length ? t.call(this, s.childTocs) : "";
+                    n += this.tag("li", v + m);
+                }
+                return this.tag("ul", n);
+            }
+            return t.call(this, e);
+        },
+        computeAuxDataForNode: function(e) {
+            for(; e.parent && e.parent.type === z.types.inlineContainer;)e = e.parent;
+            for(var t = e.previousSibling, r4 = ""; t && t.type === z.types.directive && t.directiveName === "attr_html:";)r4 += t.directiveRawValue + " ", t = t.previousSibling;
+            return r4;
+        },
+        orgClassName: function(e) {
+            return this.exportOptions.htmlClassPrefix ? this.exportOptions.htmlClassPrefix + e : e;
+        },
+        orgId: function(e) {
+            return this.exportOptions.htmlIdPrefix ? this.exportOptions.htmlIdPrefix + e : e;
+        },
+        convertHeader: function(e, t, r4, n, i4) {
+            var s = {
+            };
+            return n && (t = this.inlineTag("span", t.substring(0, 4), {
+                class: "task-status " + n
+            }) + t.substring(5)), i4 && (t = this.inlineTag("span", i4, {
+                class: "section-number"
+            }) + t, s.id = "header-" + i4.replace(/\./g, "-")), n && (s.class = "task-status " + n), this.tag("h" + (this.headerOffset + e.level), t, s, r4);
+        },
+        convertOrderedList: function(e, t, r4) {
+            return this.tag("ol", t, null, r4);
+        },
+        convertUnorderedList: function(e, t, r4) {
+            return this.tag("ul", t, null, r4);
+        },
+        convertDefinitionList: function(e, t, r4) {
+            return this.tag("dl", t, null, r4);
+        },
+        convertDefinitionItem: function(e, t, r4, n, i4) {
+            return this.tag("dt", n) + this.tag("dd", i4);
+        },
+        convertListItem: function(e, t, r4) {
+            if (this.exportOptions.suppressCheckboxHandling) return this.tag("li", t, null, r4);
+            var n = {
+            }, i4 = t;
+            if (/^\s*\[(X| |-)\]([\s\S]*)/.exec(i4)) {
+                i4 = RegExp.\$2;
+                var s = RegExp.\$1, a = {
+                    type: "checkbox"
+                };
+                switch(s){
+                    case "X":
+                        a.checked = "true", n["data-checkbox-status"] = "done";
+                        break;
+                    case "-":
+                        n["data-checkbox-status"] = "intermediate";
+                        break;
+                    default:
+                        n["data-checkbox-status"] = "undone";
+                        break;
+                }
+                i4 = this.inlineTag("input", null, a) + i4;
+            }
+            return this.tag("li", i4, n, r4);
+        },
+        convertParagraph: function(e, t, r4) {
+            return this.tag("p", t, null, r4);
+        },
+        convertPreformatted: function(e, t, r4) {
+            return this.tag("pre", t, null, r4);
+        },
+        convertTable: function(e, t, r4) {
+            return this.tag("table", this.tag("tbody", t), null, r4);
+        },
+        convertTableRow: function(e, t, r4) {
+            return this.tag("tr", t);
+        },
+        convertTableHeader: function(e, t, r4) {
+            return this.tag("th", t);
+        },
+        convertTableCell: function(e, t, r4) {
+            return this.tag("td", t);
+        },
+        convertHorizontalRule: function(e, t, r4) {
+            return this.tag("hr", null, null, r4);
+        },
+        convertInlineContainer: function(e, t, r4) {
+            return t;
+        },
+        convertBold: function(e, t, r4) {
+            return this.inlineTag("b", t);
+        },
+        convertItalic: function(e, t, r4) {
+            return this.inlineTag("i", t);
+        },
+        convertUnderline: function(e, t, r4) {
+            return this.inlineTag("span", t, {
+                style: "text-decoration:underline;"
+            });
+        },
+        convertCode: function(e, t, r4) {
+            return this.inlineTag("code", t);
+        },
+        convertDashed: function(e, t, r4) {
+            return this.inlineTag("del", t);
+        },
+        convertLink: function(e, t, r4) {
+            var n = this.stripParametersFromURL(e.src);
+            if (this.imageExtensionPattern.exec(n)) {
+                var i4 = this.getNodeTextContent(e);
+                return this.inlineTag("img", null, {
+                    src: e.src,
+                    alt: i4,
+                    title: i4
+                }, r4);
+            } else return this.inlineTag("a", t, {
+                href: e.src
+            });
+        },
+        convertQuote: function(e, t, r4) {
+            return this.tag("blockquote", t, null, r4);
+        },
+        convertExample: function(e, t, r4) {
+            return this.tag("pre", t, null, r4);
+        },
+        convertSrc: function(e, t, r4) {
+            var n = e.directiveArguments.length ? e.directiveArguments[0] : "unknown";
+            return t = this.tag("code", t, {
+                class: "language-" + n
+            }, r4), this.tag("pre", t, {
+                class: "prettyprint"
+            });
+        },
+        convertHTML: function(e, t, r4) {
+            return e.directiveName === "html:" ? e.directiveRawValue : e.directiveName === "html" ? e.children.map(function(n) {
+                return n.value;
+            }).join(\`\n\`) : t;
+        },
+        convertHeaderBlock: function(e, t, r4) {
+            t = t || 0, r4 = r4 || 0;
+            var n = [], i5 = e.header;
+            i5 && n.push(this.convertNode(i5));
+            var s = this.convertNodes(e.childNodes);
+            n.push(s);
+            var a = e.childBlocks.map(function(d, v) {
+                return this.convertHeaderBlock(d, t + 1, v);
+            }, this).join(\`\n\`);
+            n.push(a);
+            var h = n.join(\`\n\`);
+            return i5 ? this.tag("section", \`\n\` + n.join(\`\n\`), {
+                class: "block block-level-" + t
+            }) : h;
+        },
+        replaceMap: {
+            "&": [
+                "&#38;",
+                null
+            ],
+            "<": [
+                "&#60;",
+                null
+            ],
+            ">": [
+                "&#62;",
+                null
+            ],
+            '"': [
+                "&#34;",
+                null
+            ],
+            "'": [
+                "&#39;",
+                null
+            ],
+            "->": [
+                "&#10132;",
+                function(e, t) {
+                    return this.exportOptions.translateSymbolArrow && !t;
+                }
+            ]
+        },
+        replaceRegexp: null,
+        escapeSpecialChars: function(e, t) {
+            this.replaceRegexp || (this.replaceRegexp = new RegExp(Object.keys(this.replaceMap).join("|"), "g"));
+            var r4 = this.replaceMap, n = this;
+            return e.replace(this.replaceRegexp, function(i5) {
+                if (!r4[i5]) throw Error("escapeSpecialChars: Invalid match");
+                var s = r4[i5][1];
+                return typeof s == "function" && !s.call(n, e, t) ? i5 : r4[i5][0];
+            });
+        },
+        postProcess: function(e, t, r4) {
+            return this.exportOptions.exportFromLineNumber && typeof e.fromLineNumber == "number" && (t = this.inlineTag("div", t, {
+                "data-line-number": e.fromLineNumber
+            })), t;
+        },
+        makeLink: function(e) {
+            return '<a href="' + e + '">' + decodeURIComponent(e) + "</a>";
+        },
+        makeSubscript: function(e, t, r4) {
+            return '<span class="org-subscript-parent">' + t + '</span><span class="org-subscript-child">' + r4 + "</span>";
+        },
+        attributesObjectToString: function(e) {
+            var t = "";
+            for(var r4 in e)if (e.hasOwnProperty(r4)) {
+                var n = e[r4];
+                r4 === "class" ? n = this.orgClassName(n) : r4 === "id" && (n = this.orgId(n)), t += " " + r4 + '="' + n + '"';
+            }
+            return t;
+        },
+        inlineTag: function(e, t, r4, n) {
+            r4 = r4 || {
+            };
+            var i5 = "<" + e;
+            return n && (i5 += " " + n), i5 += this.attributesObjectToString(r4), t === null ? i5 + "/>" : (i5 += ">" + t + "</" + e + ">", i5);
+        },
+        tag: function(e, t, r4, n) {
+            return this.inlineTag(e, t, r4, n) + \`\n\`;
+        }
+    };
+    typeof \$ != "undefined" && (\$.ConverterHTML = q);
+});
+var F = g((H)=>{
+    if (typeof H != "undefined") {
+        let e = function(t) {
+            for(var r4 in t)t.hasOwnProperty(r4) && (H[r4] = t[r4]);
+        };
+        he = e, e(P()), e(S()), e(b()), e(P()), e(w()), e(_());
+    }
+    var he;
+});
+var te = B(F()), re = B(F()), { Parser: de , InlineParser: fe , Lexer: ve , Node: ke , Stream: me , ConverterHTML: ge  } = te;
+var export_default = re.default;
+const mod = function() {
+    return {
+        ConverterHTML: ge,
+        InlineParser: fe,
+        Lexer: ve,
+        Node: ke,
+        Parser: de,
+        Stream: me,
+        default: export_default
+    };
+}();
+class NodeDetail extends HTMLDivElement {
+    constructor(fetchNode2){
+        super();
+        this.fetchNode = fetchNode2;
+        this.classList.add("node-detail");
+        this.thumbnailElement = document.createElement('img');
+        this.thumbnailElement.classList.add("thumbnail");
+        this.thumbnailElement.hidden = true;
+        this.appendChild(this.thumbnailElement);
+        this.titleElement = document.createElement('p');
+        this.titleElement.innerText = "title";
+        this.appendChild(this.titleElement);
+        this.descriptionElement = document.createElement('p');
+        this.descriptionElement.innerText = "description";
+        this.appendChild(this.descriptionElement);
+        const modal = document.getElementById('modal');
+        const mask = document.getElementById('mask');
+        this.modalOpenElement = document.createElement("div");
+        if (modal != null && mask != null && !isNull(this.modalOpenElement)) {
+            this.modalOpenElement.id = "open";
+            this.modalOpenElement.innerText = "click to open content";
+            this.modalOpenElement.onclick = ()=>{
+                modal.classList.remove('hidden');
+                mask.classList.remove('hidden');
+            };
+            mask.onclick = ()=>{
+                modal.classList.add('hidden');
+                mask.classList.add('hidden');
+            };
+            this.appendChild(this.modalOpenElement);
+            this.modalWindowElement = modal;
+        }
+    }
+    reloadDetail = async ()=>{
+        if (this.currentNode) {
+            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
+            if (!isNull(remoteLatestNode)) {
+                this.setDetail(remoteLatestNode);
+            }
+        }
+    };
+    async setDetail(node) {
+        if (isNull(this.titleElement) || isNull(this.thumbnailElement) || isNull(this.descriptionElement)) return;
+        this.titleElement.innerText = node.title.substring(0, 25);
+        this.descriptionElement.innerText = node.description;
+        const orgPathData = orgmodeResourcePath(node.hash);
+        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
+            const blobPathData = blobResourcePath(node.hash);
+            this.thumbnailElement.src = remoteStorageURL + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+            this.thumbnailElement.hidden = false;
+        } else {
+            if (node.thumbnail == "") {
+                this.thumbnailElement.hidden = true;
+            } else {
+                this.thumbnailElement.src = node.thumbnail;
+                this.thumbnailElement.hidden = false;
+            }
+        }
+        if (this.modalWindowElement) {
+            while(this.modalWindowElement.firstChild){
+                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
+            }
+            const orgText = await remoteOrgGet(node.hash);
+            const html = org2Html(orgText);
+            if (html != "") {
+                const blob = new Blob([
+                    html.contentHTML
+                ], {
+                    type: 'text/html'
+                });
+                const iframe = document.createElement("iframe");
+                iframe.src = URL.createObjectURL(blob);
+                this.modalWindowElement.appendChild(iframe);
+            }
+        }
+        const props = objToRecurisveAccordionMenu(document, node);
+        if (isNull(this.properties)) {
+            this.appendChild(document.createTextNode("props: "));
+            this.properties = props;
+            this.appendChild(this.properties);
+        } else {
+            this.replaceChild(props, this.properties);
+            this.properties = props;
+        }
+        const tagsRoot = document.createElement('ul');
+        if (isNull(this.tags)) {
+            this.tags = tagsRoot;
+            this.appendChild(this.tags);
+        } else {
+            this.replaceChild(tagsRoot, this.tags);
+            this.tags = tagsRoot;
+        }
+        Object.entries(node.vector).forEach(async ([target, label])=>{
+            const node = await this.fetchNode(target);
+            if (node) {
+                const li = document.createElement('li');
+                li.innerText = node.title;
+                tagsRoot.appendChild(li);
+            }
+        });
+        this.currentNode = node;
+    }
+}
+class EditableNodeDetail extends NodeDetail {
+    remoteOpenOrgElement = document.createElement('div');
+    remoteOpenBlobElement = document.createElement('div');
+    remoteOpenMetaElement = document.createElement('div');
+    jsonTextAreaElement = document.createElement('textarea');
+    tagSelectorElement = document.createElement('input');
+    tagInserterButtonElement = document.createElement('button');
+    tagListElement = document.createElement('ul');
+    constructor(fetchNode1, tagHashDict, updateNode, reload1){
+        super(fetchNode1);
+        this.tagHashDict = tagHashDict;
+        this.updateNode = updateNode;
+        this.reload = reload1;
+        this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
+        this.appendChild(this.remoteOpenOrgElement);
+        this.remoteOpenBlobElement.innerText = "xdgOpenBlob";
+        this.appendChild(this.remoteOpenBlobElement);
+        this.remoteOpenMetaElement.innerText = "xdgOpenMeta";
+        this.appendChild(this.remoteOpenMetaElement);
+        this.appendChild(this.tagListElement);
+        const tagDict = tagHashDict();
+        const datalist = Object.values(tagDict).map((e)=>e.title
+        );
+        this.tagSelectorElement = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
+        this.appendChild(this.tagSelectorElement);
+        this.tagInserterButtonElement.textContent = 'tag insert';
+        this.tagInserterButtonElement.onclick = this.insertTag;
+        this.appendChild(this.tagInserterButtonElement);
+        this.jsonTextAreaElement.value = "text";
+        this.appendChild(this.jsonTextAreaElement);
+    }
+    insertTag = async ()=>{
+        const node = JSON.parse(this.jsonTextAreaElement.value);
+        const tag = this.tagHashDict()[this.tagSelectorElement.value];
+        if (Node1.validation(node)) {
+            const index = tag.hash;
+            node.vector[index] = node.vector[index] ?? {
+            };
+            node.vector[index]["tag"] = 1;
+            this.jsonTextAreaElement.value = JSON.stringify(node);
+            await this.updateNode(node, new FormData);
+            this.reload();
+        }
+    };
+    async setDetail(node) {
+        await super.setDetail(node);
+        const orgPathData = orgmodeResourcePath(node.hash);
+        this.jsonTextAreaElement.value = JSON.stringify(node);
+        if (this.remoteOpenOrgElement) {
+            removeAllChild(this.remoteOpenOrgElement);
+            const xdgOpenOrgPath = remoteStorageURL + "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            const elems = PathElement("org", "/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention, xdgOpenOrgPath);
+            elems.forEach((e)=>{
+                if (this.remoteOpenOrgElement) {
+                    this.remoteOpenOrgElement.appendChild(e);
+                }
+            });
+        }
+        if (this.remoteOpenBlobElement) {
+            if (BlobMeta.validation(node)) {
+                removeAllChild(this.remoteOpenBlobElement);
+                const blobPathData = blobResourcePath(node.hash);
+                const xdgOpenBlobPath = remoteStorageURL + "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+                const elems = PathElement("text", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
+                elems.forEach((e)=>{
+                    if (this.remoteOpenBlobElement) {
+                        this.remoteOpenBlobElement.appendChild(e);
+                    }
+                });
+                this.remoteOpenBlobElement.hidden = false;
+            } else {
+                this.remoteOpenBlobElement.hidden = true;
+            }
+        }
+        if (this.remoteOpenMetaElement) {
+            removeAllChild(this.remoteOpenMetaElement);
+            const metaPathData = metaResourcePath(node.hash);
+            const xdgOpenMetaPath = remoteStorageURL + "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
+            const elems = PathElement("text", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
+            elems.forEach((e)=>{
+                if (this.remoteOpenMetaElement) {
+                    this.remoteOpenMetaElement.appendChild(e);
+                }
+            });
+        }
+        this.reloadTagSelectorDataList();
+    }
+    reloadTagSelectorDataList = ()=>{
+        const tagDict1 = this.tagHashDict();
+        const datalist1 = Object.values(tagDict1).map((e)=>e.title
+        );
+        const dl = document.getElementById("li-tag-datalist");
+        if (!isNull(dl)) {
+            while(dl.firstChild){
+                dl.removeChild(dl.firstChild);
+            }
+            datalist1.forEach((e)=>{
+                let option = document.createElement('option');
+                option.value = e;
+                dl.appendChild(option);
+            });
+        }
+    };
+}
+const objToRecurisveAccordionMenu = (document2, obj)=>{
+    const root = document2.createElement('ul');
+    root.classList.add('accordion-child');
+    Object.entries(obj).forEach(([key2, value])=>{
+        const li = document2.createElement('li');
+        const label = document2.createElement('label');
+        label.innerText = \`\${key2.substring(0, 10)}: \`;
+        li.appendChild(label);
+        if (typeof value == 'object') {
+            const accordion = document2.createElement('input');
+            accordion.type = 'checkbox';
+            accordion.classList.add('toggle');
+            li.appendChild(accordion);
+            const ul = objToRecurisveAccordionMenu(document2, value);
+            li.appendChild(ul);
+        } else if (typeof value == 'string' || typeof value == 'number') {
+            const child = document2.createElement('input');
+            child.value = value.toString();
+            li.appendChild(child);
+        }
+        root.appendChild(li);
+    });
+    return root;
+};
+const removeAllChild = (target)=>{
+    while(target.firstChild){
+        target.removeChild(target.firstChild);
+    }
+};
+const textToClipBoard = (document2, text2)=>{
+    const tempElement = document2.createElement("textarea");
+    tempElement.textContent = text2;
+    document2.body.appendChild(tempElement);
+    document2.getSelection()?.selectAllChildren(tempElement);
+    tempElement.select();
+    var success = document2.execCommand('copy');
+    document2.body.removeChild(tempElement);
+    return success;
+};
+const PathElement = (name, copyString, onClickRequestPath)=>{
+    const elems = [];
+    const copy = document.createElement("button");
+    copy.onclick = ()=>{
+        textToClipBoard(document, copyString);
+    };
+    copy.innerText = \`\${name}: pathToClipboard\`;
+    elems.push(copy);
+    const request = document.createElement("button");
+    request.onclick = ()=>{
+        GetRequest(onClickRequestPath);
+    };
+    request.innerText = \`\${name}: remoteXdgOpen\`;
+    elems.push(request);
+    return elems;
+};
+const remoteOrgGet = async (hash4, force = false)=>{
+    const pathStruct = orgmodeResourcePath(hash4);
+    const path = remoteStorageURL + pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
+    const response = await GetRequest(path);
+    if (isNull(response)) return "";
+    const text2 = await response.text();
+    if (isNull(text2)) {
+        console.warn("Textとして解釈できないものを取得しました");
+        return "";
+    } else {
+        console.log(\`remoteOrgGet: \${text2}\`);
+        return text2;
+    }
+};
+const org2Html = (orgText)=>{
+    const orgDocument = new mod.Parser().parse(orgText);
+    const html = orgDocument.convert(mod.ConverterHTML, {
+    });
+    return html;
+};
 const ForceGraphUpdate = (nodes, height, width)=>{
     const BOUNCE = 0.05;
     const COULOMB = 600;
@@ -3731,8 +4822,8 @@ class GlobalMenu {
         if (isNull(globalMenu)) return undefined;
         globalMenu.id = "network-graph-global-menu";
         rootElement.appendChild(globalMenu);
-        const i2 = new GlobalMenu(document4, globalMenu, reload4, scopeManager1);
-        return i2;
+        const i5 = new GlobalMenu(document4, globalMenu, reload4, scopeManager1);
+        return i5;
     };
 }
 window.onload = ()=>{
