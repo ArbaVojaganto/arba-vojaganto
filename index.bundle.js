@@ -1216,7 +1216,7 @@ class BlobMeta extends Node1 {
         return true;
     };
 }
-class ReadOnlyNodeDetail extends HTMLDivElement {
+class NodeDetail extends HTMLDivElement {
     constructor(fetchNode2){
         super();
         this.fetchNode = fetchNode2;
@@ -1264,7 +1264,7 @@ class ReadOnlyNodeDetail extends HTMLDivElement {
         const orgPathData = orgmodeResourcePath(node.hash);
         if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
             const blobPathData = blobResourcePath(node.hash);
-            this.thumbnailElement.src = blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+            this.thumbnailElement.src = remoteStorageURL + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
             this.thumbnailElement.hidden = false;
         } else {
             if (node.thumbnail == "") {
@@ -1279,12 +1279,12 @@ class ReadOnlyNodeDetail extends HTMLDivElement {
                 this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
             }
             const iframe = document.createElement("iframe");
-            iframe.src = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            iframe.src = remoteStorageURL + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
             this.modalWindowElement.appendChild(iframe);
         }
         const props = objToRecurisveAccordionMenu(document, node);
         if (isNull(this.properties)) {
-            this.appendChild(document.createTextNode("props"));
+            this.appendChild(document.createTextNode("props: "));
             this.properties = props;
             this.appendChild(this.properties);
         } else {
@@ -1310,59 +1310,32 @@ class ReadOnlyNodeDetail extends HTMLDivElement {
         this.currentNode = node;
     }
 }
-class EditableNodeDetail extends HTMLDivElement {
-    constructor(titleElement, descriptionElement, remoteLinkElement, jsonTextAreaElement, thumbnailElement, tagSelectorElement, tagInserterButtonElement, tagListElement, tagHashDict, fetchNode1, updateNode, reload1){
-        super();
-        this.titleElement = titleElement;
-        this.descriptionElement = descriptionElement;
-        this.remoteLinkElement = remoteLinkElement;
-        this.jsonTextAreaElement = jsonTextAreaElement;
-        this.thumbnailElement = thumbnailElement;
-        this.tagSelectorElement = tagSelectorElement;
-        this.tagInserterButtonElement = tagInserterButtonElement;
-        this.tagListElement = tagListElement;
+class EditableNodeDetail extends NodeDetail {
+    remoteOpenOrgElement = document.createElement('div');
+    remoteOpenBlobElement = document.createElement('div');
+    remoteOpenMetaElement = document.createElement('div');
+    jsonTextAreaElement = document.createElement('textarea');
+    tagSelectorElement = document.createElement('input');
+    tagInserterButtonElement = document.createElement('button');
+    tagListElement = document.createElement('ul');
+    constructor(fetchNode1, tagHashDict, updateNode, reload1){
+        super(fetchNode1);
         this.tagHashDict = tagHashDict;
-        this.fetchNode = fetchNode1;
         this.updateNode = updateNode;
         this.reload = reload1;
-        this.classList.add("node-detail");
-        this.thumbnailElement.classList.add("thumbnail");
-        this.thumbnailElement.hidden = true;
-        this.appendChild(this.thumbnailElement);
-        this.titleElement.innerText = "title";
-        this.appendChild(this.titleElement);
-        this.descriptionElement.innerText = "description";
-        this.appendChild(this.descriptionElement);
-        this.remoteLinkElement.href = "remoteLink";
-        this.appendChild(this.remoteLinkElement);
-        const modal1 = document.getElementById('modal');
-        const mask1 = document.getElementById('mask');
-        this.modalOpenElement = document.createElement("div");
-        if (modal1 != null && mask1 != null && !isNull(this.modalOpenElement)) {
-            this.modalOpenElement.id = "open";
-            this.modalOpenElement.innerText = "click";
-            this.modalOpenElement.onclick = ()=>{
-                modal1.classList.remove('hidden');
-                mask1.classList.remove('hidden');
-            };
-            mask1.onclick = ()=>{
-                modal1.classList.add('hidden');
-                mask1.classList.add('hidden');
-            };
-            this.appendChild(this.modalOpenElement);
-            this.modalWindowElement = modal1;
-        }
-        this.remoteOpenOrgElement = document.createElement("div");
         this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
         this.appendChild(this.remoteOpenOrgElement);
-        this.remoteOpenBlobElement = document.createElement("div");
         this.remoteOpenBlobElement.innerText = "xdgOpenBlob";
         this.appendChild(this.remoteOpenBlobElement);
-        this.remoteOpenMetaElement = document.createElement("div");
         this.remoteOpenMetaElement.innerText = "xdgOpenMeta";
         this.appendChild(this.remoteOpenMetaElement);
         this.appendChild(this.tagListElement);
+        const tagDict = tagHashDict();
+        const datalist = Object.values(tagDict).map((e)=>e.title
+        );
+        this.tagSelectorElement = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
         this.appendChild(this.tagSelectorElement);
+        this.tagInserterButtonElement.textContent = 'tag insert';
         this.tagInserterButtonElement.onclick = this.insertTag;
         this.appendChild(this.tagInserterButtonElement);
         this.jsonTextAreaElement.value = "json";
@@ -1381,58 +1354,13 @@ class EditableNodeDetail extends HTMLDivElement {
             this.reload();
         }
     };
-    reloadDetail = async ()=>{
-        if (this.currentNode) {
-            const remoteLatestNode = await this.fetchNode(this.currentNode.hash);
-            if (!isNull(remoteLatestNode)) {
-                this.setDetail(remoteLatestNode);
-            }
-        }
-    };
     setDetail(node) {
-        this.titleElement.innerText = node.title.substring(0, 10);
-        this.descriptionElement.innerText = node.description;
+        super.setDetail(node);
         const orgPathData = orgmodeResourcePath(node.hash);
         this.jsonTextAreaElement.value = JSON.stringify(node);
-        if (BlobMeta.validation(node) && (node.extention == ".jpeg" || node.extention == ".png" || node.extention == ".jpg" || node.extention == ".gif")) {
-            const blobPathData = blobResourcePath(node.hash);
-            this.thumbnailElement.src = blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-            this.thumbnailElement.hidden = false;
-        } else {
-            if (node.thumbnail == "") {
-                this.thumbnailElement.hidden = true;
-            } else {
-                this.thumbnailElement.src = node.thumbnail;
-                this.thumbnailElement.hidden = false;
-            }
-        }
-        if (this.modalWindowElement) {
-            while(this.modalWindowElement.firstChild){
-                this.modalWindowElement.removeChild(this.modalWindowElement.firstChild);
-            }
-            const iframe = document.createElement("iframe");
-            iframe.src = orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
-            this.modalWindowElement.appendChild(iframe);
-        }
-        const PathElement = (name, copyString, onClickRequestPath)=>{
-            const elems = [];
-            const copy = document.createElement("button");
-            copy.onclick = ()=>{
-                textToClipBoard(document, copyString);
-            };
-            copy.innerText = `${name}: pathToClipboard`;
-            elems.push(copy);
-            const request = document.createElement("button");
-            request.onclick = ()=>{
-                GetRequest(onClickRequestPath);
-            };
-            request.innerText = `${name}: remoteXdgOpen`;
-            elems.push(request);
-            return elems;
-        };
         if (this.remoteOpenOrgElement) {
             removeAllChild(this.remoteOpenOrgElement);
-            const xdgOpenOrgPath = "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
+            const xdgOpenOrgPath = remoteStorageURL + "remote-xdg-like-open/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention;
             const elems = PathElement("org", "/" + orgPathData.prefix + orgPathData.hashDir + orgPathData.hash + orgPathData.extention, xdgOpenOrgPath);
             elems.forEach((e)=>{
                 if (this.remoteOpenOrgElement) {
@@ -1444,7 +1372,7 @@ class EditableNodeDetail extends HTMLDivElement {
             if (BlobMeta.validation(node)) {
                 removeAllChild(this.remoteOpenBlobElement);
                 const blobPathData = blobResourcePath(node.hash);
-                const xdgOpenBlobPath = "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
+                const xdgOpenBlobPath = remoteStorageURL + "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
                 const elems = PathElement("blob", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
                 elems.forEach((e)=>{
                     if (this.remoteOpenBlobElement) {
@@ -1459,7 +1387,7 @@ class EditableNodeDetail extends HTMLDivElement {
         if (this.remoteOpenMetaElement) {
             removeAllChild(this.remoteOpenMetaElement);
             const metaPathData = metaResourcePath(node.hash);
-            const xdgOpenMetaPath = "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
+            const xdgOpenMetaPath = remoteStorageURL + "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
             const elems = PathElement("json", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
             elems.forEach((e)=>{
                 if (this.remoteOpenMetaElement) {
@@ -1467,33 +1395,18 @@ class EditableNodeDetail extends HTMLDivElement {
                 }
             });
         }
-        while(this.tagListElement.firstChild){
-            this.tagListElement.removeChild(this.tagListElement.firstChild);
-        }
-        const ul = this.tagListElement;
-        Object.entries(node.vector).forEach(async ([target, label])=>{
-            const node = await this.fetchNode(target);
-            if (node) {
-                const li = document.createElement('li');
-                li.innerText = node.title;
-                ul.appendChild(li);
-            }
-        });
-        ul.appendChild(objToRecurisveAccordionMenu(document, node));
         this.reloadTagSelectorDataList();
-        this.currentNode = node;
     }
     reloadTagSelectorDataList = ()=>{
-        const tagDict = this.tagHashDict();
-        const datalist = Object.values(tagDict).map((e)=>e.title
+        const tagDict1 = this.tagHashDict();
+        const datalist1 = Object.values(tagDict1).map((e)=>e.title
         );
-        const tagSelector = CreateAutocompleteInput(document, "li-tag-datalist", datalist);
         const dl = document.getElementById("li-tag-datalist");
         if (!isNull(dl)) {
             while(dl.firstChild){
                 dl.removeChild(dl.firstChild);
             }
-            datalist.forEach((e)=>{
+            datalist1.forEach((e)=>{
                 let option = document.createElement('option');
                 option.value = e;
                 dl.appendChild(option);
@@ -1525,26 +1438,6 @@ const objToRecurisveAccordionMenu = (document2, obj)=>{
     });
     return root;
 };
-const objToRecursiveUList = (document2, obj)=>{
-    const ul = document2.createElement('ul');
-    Object.entries(obj).forEach(([key1, value])=>{
-        const li = document2.createElement('li');
-        li.innerText = key1.substring(0, 10) + ": ";
-        if (typeof value == 'object') {
-            const objElement = objToRecursiveUList(document2, value);
-            li.appendChild(objElement);
-        } else if (typeof value == 'string' || typeof value == 'number') {
-            const child = document2.createElement('input');
-            child.value = value.toString();
-            li.appendChild(child);
-        }
-        ul.appendChild(li);
-    });
-    return ul;
-};
-const nodeToRecursiveUList = (document2, node)=>{
-    return objToRecursiveUList(document2, node);
-};
 const removeAllChild = (target)=>{
     while(target.firstChild){
         target.removeChild(target.firstChild);
@@ -1559,6 +1452,22 @@ const textToClipBoard = (document2, text)=>{
     var success = document2.execCommand('copy');
     document2.body.removeChild(tempElement);
     return success;
+};
+const PathElement = (name, copyString, onClickRequestPath)=>{
+    const elems = [];
+    const copy = document.createElement("button");
+    copy.onclick = ()=>{
+        textToClipBoard(document, copyString);
+    };
+    copy.innerText = `${name}: pathToClipboard`;
+    elems.push(copy);
+    const request = document.createElement("button");
+    request.onclick = ()=>{
+        GetRequest(onClickRequestPath);
+    };
+    request.innerText = `${name}: remoteXdgOpen`;
+    elems.push(request);
+    return elems;
 };
 class PriorityQueue {
     items = {
@@ -3493,7 +3402,7 @@ class ViewerApplication {
         customElements.define('localmenu-div', LocalMenu, {
             extends: 'div'
         });
-        customElements.define('node-detail-div', ReadOnlyNodeDetail, {
+        customElements.define('node-detail-div', NodeDetail, {
             extends: 'div'
         });
     };
@@ -3530,7 +3439,7 @@ class LocalMenu extends HTMLDivElement {
         this.updateNode = updateNode1;
         this.reload = reload2;
         this.id = "network-graph-local-menu";
-        this.detail = new ReadOnlyNodeDetail(this.fetchNode);
+        this.detail = new NodeDetail(this.fetchNode);
         this.appendChild(this.detail);
     }
     setDetail(node) {
