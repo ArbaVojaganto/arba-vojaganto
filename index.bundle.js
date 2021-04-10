@@ -4045,7 +4045,7 @@ class EditableNodeDetail extends NodeDetail {
                 removeAllChild(this.remoteOpenBlobElement);
                 const blobPathData = blobResourcePath(node.hash);
                 const xdgOpenBlobPath = remoteStorageURL + "remote-xdg-like-open/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention;
-                const elems = PathElement("text", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
+                const elems = PathElement("blob", "/" + blobPathData.prefix + blobPathData.hashDir + blobPathData.hash + node.extention, xdgOpenBlobPath);
                 elems.forEach((e)=>{
                     if (this.remoteOpenBlobElement) {
                         this.remoteOpenBlobElement.appendChild(e);
@@ -4060,7 +4060,7 @@ class EditableNodeDetail extends NodeDetail {
             removeAllChild(this.remoteOpenMetaElement);
             const metaPathData = metaResourcePath(node.hash);
             const xdgOpenMetaPath = remoteStorageURL + "remote-xdg-like-open/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention;
-            const elems = PathElement("text", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
+            const elems = PathElement("json", "/" + metaPathData.prefix + metaPathData.hashDir + metaPathData.hash + metaPathData.extention, xdgOpenMetaPath);
             elems.forEach((e)=>{
                 if (this.remoteOpenMetaElement) {
                     this.remoteOpenMetaElement.appendChild(e);
