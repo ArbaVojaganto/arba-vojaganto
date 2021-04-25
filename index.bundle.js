@@ -95,7 +95,7 @@ class Sha256 {
     #hashed;
     #hBytes;
     #is224;
-    #lastByteIndex=0;
+    #lastByteIndex = 0;
     #start;
     constructor(is2241 = false, sharedMemory1 = false){
         this.init(is2241, sharedMemory1);
@@ -549,6 +549,14 @@ const todayString = ()=>{
     return new RegExp("^[0-9]+-[0-9]+-[0-9]+").exec(new Date().toISOString())?.[0];
 };
 class Node1 {
+    hash;
+    title;
+    createdAt;
+    thumbnail;
+    description;
+    vector;
+    remoteUri;
+    type;
     referers = {
     };
     constructor(hash2, title, createdAt, thumbnail, description, vector, remoteUri){
@@ -586,6 +594,14 @@ class Node1 {
         return true;
     };
 }
+const GetNodeEdges = (target)=>{
+    const ret = {
+        ...target.vector,
+        ...target.referers
+    };
+    delete ret[target.hash];
+    return Object.entries(ret);
+};
 class EventDispatcher {
     ListnersMap = {
     };
@@ -679,6 +695,9 @@ const scaleMatrix = (x, y)=>{
     ];
 };
 class CanvasManager extends EventDispatcher {
+    document;
+    rootNode;
+    graphCanvas;
     _translating = false;
     _prePos = {
         x: 0,
@@ -730,17 +749,17 @@ class CanvasManager extends EventDispatcher {
     id = ()=>{
         return this.graphCanvas ? this.graphCanvas.id : "";
     };
-    constructor(document1, rootNode){
+    constructor(document1, rootNode1){
         super();
         this.document = document1;
-        this.rootNode = rootNode;
+        this.rootNode = rootNode1;
         this.graphCanvas = document1.createElement("canvas");
         this.graphCanvas.style.width = window.innerWidth + 'px';
         this.graphCanvas.style.height = window.innerHeight + 'px';
         this.graphCanvas.width = Math.floor(window.innerWidth * window.devicePixelRatio);
         this.graphCanvas.height = Math.floor(window.innerHeight * window.devicePixelRatio);
         this.graphCanvas.id = "network-graph-canvas";
-        rootNode.appendChild(this.graphCanvas);
+        rootNode1.appendChild(this.graphCanvas);
     }
     init = ()=>{
         this.initModel();
@@ -1198,6 +1217,8 @@ class StoredNodes {
     };
 }
 class BlobMeta extends Node1 {
+    extention;
+    mimeType;
     type = "BlobMeta";
     constructor(hash1, title1, extention, createdAt1, thumbnail1, description1, vector1, mimeType, remoteUri1){
         super(hash1, title1, createdAt1, thumbnail1, description1, vector1, remoteUri1);
@@ -2008,6 +2029,7 @@ class Graph {
 }
 class Edge {
     type = "edge";
+    slope;
     color = "rgb(0,0,0)";
     altColor = "rgb(255,0,0)";
     selected = false;
@@ -2456,12 +2478,12 @@ class Sha1 {
     #hBytes;
     #finalized;
     #hashed;
-    #h0=1732584193;
-    #h1=4023233417;
-    #h2=2562383102;
-    #h3=271733878;
-    #h4=3285377520;
-    #lastByteIndex=0;
+    #h0 = 1732584193;
+    #h1 = 4023233417;
+    #h2 = 2562383102;
+    #h3 = 271733878;
+    #h4 = 3285377520;
+    #lastByteIndex = 0;
     constructor(sharedMemory3 = false){
         this.init(sharedMemory3);
     }
@@ -3870,16 +3892,25 @@ var te = B(F()), re = B(F()), { Parser: de , InlineParser: fe , Lexer: ve , Node
 var export_default = re.default;
 const mod = function() {
     return {
+        default: export_default,
         ConverterHTML: ge,
         InlineParser: fe,
         Lexer: ve,
         Node: ke,
         Parser: de,
-        Stream: me,
-        default: export_default
+        Stream: me
     };
 }();
 class NodeDetail extends HTMLDivElement {
+    fetchNode;
+    modalOpenElement;
+    modalWindowElement;
+    currentNode;
+    titleElement;
+    descriptionElement;
+    thumbnailElement;
+    properties;
+    tags;
     constructor(fetchNode2){
         super();
         this.fetchNode = fetchNode2;
@@ -3983,6 +4014,9 @@ class NodeDetail extends HTMLDivElement {
     }
 }
 class EditableNodeDetail extends NodeDetail {
+    tagHashDict;
+    updateNode;
+    reload;
     remoteOpenOrgElement = document.createElement('div');
     remoteOpenBlobElement = document.createElement('div');
     remoteOpenMetaElement = document.createElement('div');
@@ -3990,10 +4024,10 @@ class EditableNodeDetail extends NodeDetail {
     tagSelectorElement = document.createElement('input');
     tagInserterButtonElement = document.createElement('button');
     tagListElement = document.createElement('ul');
-    constructor(fetchNode1, tagHashDict, updateNode, reload1){
+    constructor(fetchNode1, tagHashDict, updateNode1, reload1){
         super(fetchNode1);
         this.tagHashDict = tagHashDict;
-        this.updateNode = updateNode;
+        this.updateNode = updateNode1;
         this.reload = reload1;
         this.remoteOpenOrgElement.innerText = "xdgOpenOrg";
         this.appendChild(this.remoteOpenOrgElement);
@@ -4253,6 +4287,8 @@ class ScopeGraphManager {
     fetchNode = async (hash4)=>{
         return undefined;
     };
+    canvasManager;
+    store;
     onNodeSelectedOfView = ()=>{
     };
     constructor(){
@@ -4295,37 +4331,35 @@ class ScopeGraphManager {
     };
 }
 class SingleNodeTargetScopeGraph {
+    target;
+    fetchNode;
+    canvasManager;
+    onNodeSelectedOfView;
+    nextGraphRender;
     graphNodes = {
     };
     nodes = {
     };
+    graph;
     graphId = -1;
     isRebuilding = false;
     updataing = false;
     constructor(target, fetchNode3 = async (uri)=>{
         return undefined;
-    }, canvasManager, onNodeSelectedOfView, nextGraphRender){
+    }, canvasManager1, onNodeSelectedOfView, nextGraphRender){
         this.target = target;
         this.fetchNode = fetchNode3;
-        this.canvasManager = canvasManager;
+        this.canvasManager = canvasManager1;
         this.onNodeSelectedOfView = onNodeSelectedOfView;
         this.nextGraphRender = nextGraphRender;
         if (target.hash != "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446") {
             this.nodes[target.hash] = NodeToForceNode(target);
-            if (canvasManager.graphCanvas) {
-                this.nodes[target.hash].x = canvasManager.graphCanvas.width / 2;
-                this.nodes[target.hash].y = canvasManager.graphCanvas.height / 2;
+            if (canvasManager1.graphCanvas) {
+                this.nodes[target.hash].x = canvasManager1.graphCanvas.width / 2;
+                this.nodes[target.hash].y = canvasManager1.graphCanvas.height / 2;
             }
         }
     }
-    edges = (n)=>{
-        const ret = {
-            ...n.vector,
-            ...n.referers
-        };
-        delete ret[n.hash];
-        return Object.entries(ret);
-    };
     removeDependancy = ()=>{
         if (isNull(this.graph)) {
             return;
@@ -4336,7 +4370,6 @@ class SingleNodeTargetScopeGraph {
         this.canvasManager.removeEventListner('dblclick', this.graph.doubleClick);
     };
     reset = async ()=>{
-        const links = this.edges(this.target);
         const tempNodeDict = {
         };
         if (this.target.hash != "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446") {
@@ -4344,6 +4377,7 @@ class SingleNodeTargetScopeGraph {
             criteria.movable = false;
             tempNodeDict[this.target.hash] = criteria;
         }
+        const links = GetNodeEdges(this.target);
         for await (const [hash4, edge] of links){
             const a = await this.fetchNode(hash4);
             if (a) {
@@ -4452,7 +4486,7 @@ class SingleNodeTargetScopeGraph {
 const viewerRequestOfRemoteGet = async (hash4, force = false)=>{
     const pathStruct = metaResourcePath(hash4);
     if (remoteStorageURL == "") {
-        console.warn(`\n    リモートストレージパスが設定されていません。\n    HTML内で下記の例のようにノード情報の配置場所を定義してください。\n    例:\n    var remoteStorageURL = "https://raw.githubusercontent.com/ArbaVojaganto/hogeRepository/main/"\n    `);
+        console.warn(`\r\n    リモートストレージパスが設定されていません。\r\n    HTML内で下記の例のようにノード情報の配置場所を定義してください。\r\n    例:\r\n    var remoteStorageURL = "https://raw.githubusercontent.com/ArbaVojaganto/hogeRepository/main/"\r\n    `);
     }
     const path = remoteStorageURL + pathStruct.prefix + pathStruct.hashDir + pathStruct.hash + pathStruct.extention;
     const response = await GetRequest(path);
@@ -4471,8 +4505,13 @@ const viewerRequestOfRemoteGet = async (hash4, force = false)=>{
     }
 };
 class ViewerApplication {
+    document;
+    containerNode;
     store = new StoredNodes();
     scopeGraphHistory = new ScopeGraphManager();
+    globalMenu;
+    canvasManager;
+    localMenu;
     updateFunctions = [];
     constructor(document2, containerNode){
         this.document = document2;
@@ -4524,10 +4563,14 @@ class ViewerApplication {
     };
 }
 class LocalMenu extends HTMLDivElement {
-    constructor(tagHashDict1, fetchNode4, updateNode1, reload2){
+    fetchNode;
+    updateNode;
+    reload;
+    detail;
+    constructor(tagHashDict1, fetchNode4, updateNode2, reload2){
         super();
         this.fetchNode = fetchNode4;
-        this.updateNode = updateNode1;
+        this.updateNode = updateNode2;
         this.reload = reload2;
         this.id = "network-graph-local-menu";
         this.detail = new NodeDetail(this.fetchNode);
@@ -4544,9 +4587,13 @@ class LocalMenu extends HTMLDivElement {
     }
 }
 class GlobalMenu {
-    constructor(document3, rootNode1, reload3, scopeManager){
+    document;
+    rootNode;
+    reload;
+    scopeManager;
+    constructor(document3, rootNode2, reload3, scopeManager){
         this.document = document3;
-        this.rootNode = rootNode1;
+        this.rootNode = rootNode2;
         this.reload = reload3;
         this.scopeManager = scopeManager;
         const toAllScope = document3.createElement("button");
@@ -4554,19 +4601,19 @@ class GlobalMenu {
             this.scopeManager?.restart(bufferToHash("node"));
         };
         toAllScope.innerText = `toAllScope`;
-        rootNode1.appendChild(toAllScope);
+        rootNode2.appendChild(toAllScope);
         const toTagScope = document3.createElement('button');
         toTagScope.onclick = ()=>{
             this.scopeManager?.restart(bufferToHash("tag"));
         };
         toTagScope.innerText = `toTagScope`;
-        rootNode1.appendChild(toTagScope);
+        rootNode2.appendChild(toTagScope);
         const toBlobScope = document3.createElement('button');
         toBlobScope.onclick = ()=>{
             this.scopeManager?.restart(bufferToHash("blob"));
         };
         toBlobScope.innerText = `toBlobScope`;
-        rootNode1.appendChild(toBlobScope);
+        rootNode2.appendChild(toBlobScope);
         const toTodayScope = document3.createElement('button');
         toTodayScope.onclick = ()=>{
             const s = todayString();
@@ -4575,7 +4622,7 @@ class GlobalMenu {
             }
         };
         toTodayScope.innerText = `toTodayScope`;
-        rootNode1.appendChild(toTodayScope);
+        rootNode2.appendChild(toTodayScope);
     }
     static init = (document4, rootElement, reload4, scopeManager1)=>{
         const globalMenu = document4.createElement("div");
